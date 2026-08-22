@@ -9,7 +9,6 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -22,16 +21,18 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Trailbound 5.9 - fixes stale routes and refreshes real route-average fuel pricing. */
+/** Trailbound route refresh + automatic route gas averaging. */
 public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity {
     private static final String PREFS = "trailbound_v5";
     private SharedPreferences prefs;
@@ -39,6 +40,7 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean patching;
     private boolean autoRefreshAttempted;
+    private String lastEndpointSignature = "";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -85,6 +87,12 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
 
             correctLinkedPlan(root, from, to);
 
+            String endpointSignature = text(from).trim() + "|" + text(to).trim();
+            if (!endpointSignature.equals(lastEndpointSignature)) {
+                lastEndpointSignature = endpointSignature;
+                autoRefreshAttempted = false;
+            }
+
             JSONObject trip = activeTrip();
             double miles = number(trip.optString("outMiles", "0")) + number(trip.optString("backMiles", "0"));
             if (!autoRefreshAttempted && from != null && to != null && !text(from).trim().isEmpty() && !text(to).trim().isEmpty() && miles <= 0) {
@@ -106,11 +114,30 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
         }
         if (showToast) toast("Refreshing route and gas prices…");
 
-        // Reuse the app's native map action so route geometry, miles, time and linked profile state stay canonical.
+        // Clear any old geometry first so a slow network call can never be mistaken
+        // for a fresh route simply because the text endpoints changed.
+        clearActiveRouteForRefresh(start, end);
+
+        // Reuse the app's canonical mapping action so miles, time and route geometry
+        // are persisted through the same path used everywhere else.
         if (mapButton != null) mapButton.performClick();
 
-        // Wait for the asynchronous map save, then sample the newly persisted route.
         pollForFreshRoute(start, end, 0, updateButton, avgGas);
+    }
+
+    private void clearActiveRouteForRefresh(String start, String end) {
+        String id = prefs.getString("activeTripId", "");
+        if (id.isEmpty()) return;
+        try {
+            JSONObject trip = profileById("trips", id);
+            if (trip.optString("id", "").isEmpty()) return;
+            trip.put("start", start);
+            trip.put("end", end);
+            for (String key : new String[]{"routeOut", "routeBack", "startLat", "startLon", "endLat", "endLon", "outMiles", "backMiles", "outHours", "backHours"}) {
+                trip.put(key, "");
+            }
+            upsertTrip(trip);
+        } catch (Exception ignored) { }
     }
 
     private void pollForFreshRoute(String expectedStart, String expectedEnd, int attempt, Button updateButton, EditText avgGas) {
@@ -130,39 +157,74 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
 
     private void refreshGasAverage(JSONObject trip, EditText avgGas, Button updateButton) {
         io.execute(() -> {
-            ArrayList<Double> samples = new ArrayList<>();
-            LinkedHashSet<String> states = new LinkedHashSet<>();
+            ArrayList<Double> priceSamples = new ArrayList<>();
+            ArrayList<String> routeStateSamples = new ArrayList<>();
+            LinkedHashSet<String> uniqueStates = new LinkedHashSet<>();
+            boolean usedNationalFallback = false;
+
             try {
                 JSONArray route = new JSONArray(trip.optString("routeOut", "[]"));
                 if (route.length() > 0) {
-                    int[] positions = new int[]{0, route.length()/4, route.length()/2, (route.length()*3)/4, route.length()-1};
+                    int last = route.length() - 1;
+                    int[] positions = new int[]{0, last / 6, last / 3, last / 2, (last * 2) / 3, (last * 5) / 6, last};
                     for (int pos : positions) {
                         if (pos < 0 || pos >= route.length()) continue;
                         JSONArray p = route.optJSONArray(pos);
                         if (p == null || p.length() < 2) continue;
                         String state = reverseState(p.optDouble(1), p.optDouble(0));
-                        if (!state.isEmpty()) states.add(state);
+                        if (!state.isEmpty()) {
+                            routeStateSamples.add(state);
+                            uniqueStates.add(state);
+                        }
                     }
                 }
 
                 int fuelIndex = linkedFuelIndex(trip);
-                for (String state : states) {
-                    double price = aaaStatePrice(state, fuelIndex);
-                    if (price > 0) samples.add(price);
+                Map<String, Double> priceByState = new LinkedHashMap<>();
+                for (String state : routeStateSamples) {
+                    Double cached = priceByState.get(state);
+                    double price;
+                    if (cached == null) {
+                        price = aaaStatePrice(state, fuelIndex);
+                        priceByState.put(state, price);
+                    } else {
+                        price = cached;
+                    }
+                    if (price > 0) priceSamples.add(price);
                 }
-                if (samples.isEmpty()) {
+
+                if (priceSamples.isEmpty()) {
                     double national = aaaNationalPrice(fuelIndex);
-                    if (national > 0) samples.add(national);
+                    if (national > 0) {
+                        priceSamples.add(national);
+                        usedNationalFallback = true;
+                    }
                 }
             } catch (Exception ignored) { }
 
+            final boolean live = !priceSamples.isEmpty();
             final double average;
-            if (!samples.isEmpty()) {
+            if (live) {
                 double total = 0;
-                for (double d : samples) total += d;
-                average = total / samples.size();
+                for (double d : priceSamples) total += d;
+                average = total / priceSamples.size();
             } else {
                 average = number(prefs.getString("lastRouteAverageGas", "0"));
+            }
+
+            final int sampleCount = priceSamples.size();
+            final String source;
+            if (live) {
+                if (usedNationalFallback) {
+                    source = "Automatic average • current national public fallback";
+                } else {
+                    String statesText = uniqueStates.isEmpty() ? "route" : joinStates(uniqueStates);
+                    source = "Automatic route average • " + sampleCount + " route sample" + (sampleCount == 1 ? "" : "s") + " • " + statesText;
+                }
+            } else if (average > 0) {
+                source = "Cached automatic average • live public pricing unavailable right now";
+            } else {
+                source = "Automatic route average unavailable";
             }
 
             main.post(() -> {
@@ -170,24 +232,34 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
                     String value = String.format(Locale.US, "%.2f", average);
                     if (avgGas != null) avgGas.setText(value);
                     persistTripField("gas", value);
-                    persistTripField("gasSource", "Automatic route average from " + Math.max(1, samples.size()) + " public price sample(s)");
-                    prefs.edit().putString("lastRouteAverageGas", value).apply();
+                    persistTripField("gasSource", source);
+                    if (live) prefs.edit().putString("lastRouteAverageGas", value).apply();
                     if (updateButton != null) updateButton.performClick();
                     main.postDelayed(() -> {
-                        correctLinkedPlan(getWindow().getDecorView(), exactField(getWindow().getDecorView(), "FROM"), exactField(getWindow().getDecorView(), "TO"));
-                        getWindow().getDecorView().requestLayout();
+                        View root = getWindow().getDecorView();
+                        correctLinkedPlan(root, exactField(root, "FROM"), exactField(root, "TO"));
+                        root.requestLayout();
                     }, 250);
-                    toast("Automatic route gas average refreshed: $" + value + "/gal");
+                    toast(live ? "Automatic route gas average refreshed: $" + value + "/gal" : "Live gas data unavailable; using cached automatic average $" + value + "/gal");
                 } else {
-                    toast("Live gas average unavailable. Keeping your last saved automatic estimate.");
+                    toast("Automatic gas average unavailable. Your conservative scenario is still available.");
                 }
             });
         });
     }
 
+    private String joinStates(Set<String> states) {
+        StringBuilder out = new StringBuilder();
+        for (String state : states) {
+            if (out.length() > 0) out.append(" / ");
+            out.append(state);
+        }
+        return out.toString();
+    }
+
     private String reverseState(double lat, double lon) {
         try {
-            String url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=5&lat=" + lat + "&lon=" + lon;
+            String url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=5&lat=" + lat + "&lon=" + lon;
             JSONObject o = new JSONObject(http(url));
             JSONObject a = o.optJSONObject("address");
             if (a == null) return "";
@@ -261,13 +333,16 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
         } catch (Exception ignored) { }
     }
 
-    private JSONObject activeTrip() { return profileById("trips", prefs.getString("activeTripId", "")); }
+    private JSONObject activeTrip() {
+        return profileById("trips", prefs.getString("activeTripId", ""));
+    }
 
     private void persistTripField(String key, Object value) {
         String id = prefs.getString("activeTripId", "");
         if (id.isEmpty()) return;
         try {
-            JSONArray a = profiles("trips"), out = new JSONArray();
+            JSONArray a = profiles("trips");
+            JSONArray out = new JSONArray();
             for (int i = 0; i < a.length(); i++) {
                 JSONObject o = a.optJSONObject(i);
                 if (o == null) continue;
@@ -276,6 +351,24 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
             }
             prefs.edit().putString("trips", out.toString()).commit();
         } catch (Exception ignored) { }
+    }
+
+    private void upsertTrip(JSONObject profile) throws Exception {
+        JSONArray a = profiles("trips");
+        JSONArray out = new JSONArray();
+        boolean replaced = false;
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject o = a.optJSONObject(i);
+            if (o == null) continue;
+            if (profile.optString("id", "").equals(o.optString("id", ""))) {
+                out.put(profile);
+                replaced = true;
+            } else {
+                out.put(o);
+            }
+        }
+        if (!replaced) out.put(profile);
+        if (!prefs.edit().putString("trips", out.toString()).commit()) throw new Exception("storage");
     }
 
     private JSONArray profiles(String key) {
@@ -307,13 +400,15 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
     }
 
     private Button findButton(View root, String target) {
-        ArrayList<Button> buttons = new ArrayList<>(); collect(root, Button.class, buttons);
+        ArrayList<Button> buttons = new ArrayList<>();
+        collect(root, Button.class, buttons);
         for (Button b : buttons) if (b.getText() != null && target.equalsIgnoreCase(b.getText().toString().trim())) return b;
         return null;
     }
 
     private TextView findExactText(View root, String target) {
-        ArrayList<TextView> views = new ArrayList<>(); collect(root, TextView.class, views);
+        ArrayList<TextView> views = new ArrayList<>();
+        collect(root, TextView.class, views);
         for (TextView t : views) if (t.getText() != null && target.equalsIgnoreCase(t.getText().toString().trim())) return t;
         return null;
     }
@@ -326,21 +421,32 @@ public class TrailboundRouteGasRefreshActivity extends TrailboundDualGasActivity
         }
     }
 
-    private String text(EditText e) { return e == null || e.getText() == null ? "" : e.getText().toString(); }
-    private double number(String s) { try { return Double.parseDouble(s == null ? "" : s.trim()); } catch (Exception e) { return 0; } }
+    private String text(EditText e) {
+        return e == null || e.getText() == null ? "" : e.getText().toString();
+    }
+
+    private double number(String s) {
+        try { return Double.parseDouble(s == null ? "" : s.trim()); }
+        catch (Exception e) { return 0; }
+    }
+
     private int dp(int n) { return (int)(n * getResources().getDisplayMetrics().density + .5f); }
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
 
     private String http(String u) throws Exception {
         HttpURLConnection c = (HttpURLConnection)new URL(u).openConnection();
-        c.setConnectTimeout(12000); c.setReadTimeout(22000);
-        c.setRequestProperty("User-Agent", "TrailboundAndroid/5.9");
+        c.setConnectTimeout(12000);
+        c.setReadTimeout(22000);
+        c.setRequestProperty("User-Agent", "TrailboundAndroid/6.0");
         c.setRequestProperty("Accept", "application/json,text/html,*/*");
         try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
-            StringBuilder s = new StringBuilder(); String line;
+            StringBuilder s = new StringBuilder();
+            String line;
             while ((line = br.readLine()) != null) s.append(line);
             return s.toString();
-        } finally { c.disconnect(); }
+        } finally {
+            c.disconnect();
+        }
     }
 
     @Override protected void onDestroy() {
