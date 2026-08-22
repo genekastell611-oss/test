@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TripFuel</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif}*{box-sizing:border-box}body{margin:0;background:#07101f;color:#f7f9fc}header{padding:22px 18px 12px;background:linear-gradient(135deg,#0f1c34,#142846)}h1{margin:0;font-size:30px}header p{margin:6px 0 0;color:#afbdd0}.wrap{padding:14px;max-width:900px;margin:auto}.card{background:#101b2d;border:1px solid #26344a;border-radius:18px;padding:15px;margin-bottom:14px}.field{margin-bottom:12px}label{display:block;font-size:12px;font-weight:800;letter-spacing:.03em;margin-bottom:6px;color:#cbd6e5}input,select,button{width:100%;min-height:48px;border-radius:12px;font-size:16px}input,select{border:1px solid #3b4d67;background:#081321;color:white;padding:10px 12px}button{border:0;background:#3f7cff;color:white;font-weight:800;padding:10px 14px}.secondary{background:#1b2a42}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}#map{height:300px;border-radius:16px;overflow:hidden;background:#16243a;margin-bottom:14px}.status{font-size:13px;color:#aebbd0;min-height:20px;margin-top:8px}.results{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#0a1423;border:1px solid #24334b;border-radius:14px;padding:12px}.metric small{display:block;color:#93a3b8}.metric strong{display:block;font-size:22px;margin-top:4px}.total{margin-top:12px;padding:18px;border-radius:16px;background:linear-gradient(135deg,#2e65ed,#6b46e5)}.total small{opacity:.86}.total strong{display:block;font-size:36px;margin-top:4px}.prices{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.hint{font-size:12px;line-height:1.4;color:#92a2b7;margin-top:7px}.badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#17315a;color:#b9d4ff;font-size:12px;font-weight:700;margin-top:8px}@media(max-width:520px){.row{grid-template-columns:1fr}.prices{grid-template-columns:1fr 1fr}#map{height:255px}}
+</style>
+</head>
+<body>
+<header><h1>TripFuel</h1><p>Route distance + vehicle MPG + route gas-price average = estimated fuel cost.</p><span class="badge">Round trip included</span></header>
+<div class="wrap">
+<div class="card">
+  <div class="field"><label>START</label><input id="start" value="Raleigh, NC" placeholder="Starting address or city"></div>
+  <div class="field"><label>DESTINATION</label><input id="end" value="Charlotte, NC" placeholder="Destination address or city"></div>
+  <button id="routeBtn">Find Route</button>
+  <div id="routeStatus" class="status">Enter two places and tap Find Route.</div>
+</div>
+<div id="map"></div>
+<div class="card">
+  <div class="row">
+    <div class="field"><label>VEHICLE YEAR</label><input id="year" inputmode="numeric" value="2020"></div>
+    <div class="field"><label>MAKE</label><input id="make" value="Toyota"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>MODEL</label><input id="model" value="Camry"></div>
+    <div class="field"><label>AVERAGE MPG</label><input id="mpg" type="number" min="1" step="0.1" value="28"></div>
+  </div>
+  <div class="field"><label>ONE-WAY MILES</label><input id="miles" type="number" min="0.1" step="0.1" value=""></div>
+  <div class="field"><label>GAS PRICES ALONG ROUTE ($/GAL)</label><div class="prices">
+    <input class="price" type="number" min="0.1" step="0.01" value="3.22" aria-label="gas price 1">
+    <input class="price" type="number" min="0.1" step="0.01" value="3.28" aria-label="gas price 2">
+    <input class="price" type="number" min="0.1" step="0.01" value="3.31" aria-label="gas price 3">
+    <input class="price" type="number" min="0.1" step="0.01" value="3.25" aria-label="gas price 4">
+  </div><div class="hint">These four values are averaged. You can enter current prices from points along your route; automatic live station-price lookup is the next data-source upgrade.</div></div>
+  <button id="calcBtn">Calculate Fuel Cost</button>
+  <div id="calcStatus" class="status"></div>
+</div>
+<div class="card">
+  <div class="results">
+    <div class="metric"><small>One-way distance</small><strong id="oneMiles">—</strong></div>
+    <div class="metric"><small>Round trip</small><strong id="roundMiles">—</strong></div>
+    <div class="metric"><small>Gallons needed</small><strong id="gallons">—</strong></div>
+    <div class="metric"><small>Avg. route gas</small><strong id="avgPrice">—</strong></div>
+    <div class="metric"><small>One-way gas</small><strong id="oneCost">—</strong></div>
+    <div class="metric"><small>Vehicle</small><strong id="vehicle" style="font-size:16px">—</strong></div>
+  </div>
+  <div class="total"><small>Estimated round-trip gas cost</small><strong id="total">—</strong></div>
+</div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);let map,routeLayer;
+function money(n){return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n)}
+function initMap(){if(window.L){map=L.map('map',{zoomControl:true}).setView([35.78,-78.64],7);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map)}else{$('routeStatus').textContent='Map tiles could not load. Route distance can still be entered manually.'}}
+async function geocode(q){const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q);const r=await fetch(url,{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error('Address lookup failed');const j=await r.json();if(!j.length)throw new Error('Place not found: '+q);return {lat:+j[0].lat,lon:+j[0].lon,name:j[0].display_name}}
+async function findRoute(){const s=$('start').value.trim(),e=$('end').value.trim();if(!s||!e){$('routeStatus').textContent='Enter both a start and destination.';return}$('routeBtn').disabled=true;$('routeStatus').textContent='Looking up route…';try{const [a,b]=await Promise.all([geocode(s),geocode(e)]);const url=`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;const r=await fetch(url);const j=await r.json();if(!j.routes||!j.routes.length)throw new Error('No driving route found');const route=j.routes[0],miles=route.distance/1609.344;$('miles').value=miles.toFixed(1);$('routeStatus').textContent=`Route found: ${miles.toFixed(1)} miles one way.`;if(map&&window.L){if(routeLayer)map.removeLayer(routeLayer);const latlngs=route.geometry.coordinates.map(c=>[c[1],c[0]]);routeLayer=L.polyline(latlngs,{weight:5}).addTo(map);L.marker([a.lat,a.lon]).addTo(map).bindPopup('Start');L.marker([b.lat,b.lon]).addTo(map).bindPopup('Destination');map.fitBounds(routeLayer.getBounds(),{padding:[25,25]})}calculate()}catch(err){$('routeStatus').textContent=err.message+'. You can still enter one-way miles manually.'}finally{$('routeBtn').disabled=false}}
+function calculate(){const miles=+$('miles').value,mpg=+$('mpg').value;const ps=[...document.querySelectorAll('.price')].map(x=>+x.value).filter(x=>Number.isFinite(x)&&x>0);if(!(miles>0)||!(mpg>0)||!ps.length){$('calcStatus').textContent='Enter valid miles, MPG, and at least one gas price.';return}const avg=ps.reduce((a,b)=>a+b,0)/ps.length,round=miles*2,gals=round/mpg,one=(miles/mpg)*avg,total=gals*avg;$('oneMiles').textContent=miles.toFixed(1)+' mi';$('roundMiles').textContent=round.toFixed(1)+' mi';$('gallons').textContent=gals.toFixed(1)+' gal';$('avgPrice').textContent=money(avg)+'/gal';$('oneCost').textContent=money(one);$('total').textContent=money(total);$('vehicle').textContent=[ $('year').value.trim(),$('make').value.trim(),$('model').value.trim()].filter(Boolean).join(' ')+' • '+mpg.toFixed(1).replace('.0','')+' MPG';$('calcStatus').textContent='Estimate updated.'}
+$('routeBtn').addEventListener('click',findRoute);$('calcBtn').addEventListener('click',calculate);document.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>{if(i.id!=='start'&&i.id!=='end')calculate()}));initMap();calculate();
+</script>
+</body>
+</html>
