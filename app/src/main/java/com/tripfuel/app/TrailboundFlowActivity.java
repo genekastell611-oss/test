@@ -20,24 +20,22 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Flow/polish layer for Trailbound 4.2.
- * Keeps the full TrailboundActivity feature set, but replaces the fragile
- * vacation-save interaction and moves hotel inclusion into trip planning.
- */
 public class TrailboundFlowActivity extends TrailboundActivity {
     private SharedPreferences flowPrefs;
     private final ExecutorService flowIo = Executors.newSingleThreadExecutor();
+    private boolean patching;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         flowPrefs = getSharedPreferences("trailbound", MODE_PRIVATE);
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (!patching) patchCurrentScreen();
+        });
         getWindow().getDecorView().post(this::patchCurrentScreen);
     }
 
@@ -47,41 +45,26 @@ public class TrailboundFlowActivity extends TrailboundActivity {
     }
 
     private void patchCurrentScreen() {
-        View root = getWindow().getDecorView();
-        patchNavigation(root);
-        patchTripScreen(root);
-        patchHotelScreen(root);
-    }
-
-    private void patchNavigation(View root) {
-        for (Button b : buttons(root)) {
-            String t = textOf(b);
-            if (t.equalsIgnoreCase("Trip") || t.equalsIgnoreCase("Car") || t.equalsIgnoreCase("Hotel") || t.equalsIgnoreCase("Area")) {
-                View.OnClickListener original = getExistingClickListenerProxy(b);
-                b.setOnClickListener(v -> {
-                    // performClick cannot be used after replacing the listener, so refresh the
-                    // screen after Android completes the inherited click through accessibility path.
-                    if (original != null) original.onClick(v);
-                    getWindow().getDecorView().postDelayed(this::patchCurrentScreen, 100);
-                });
-            }
+        if (patching) return;
+        patching = true;
+        try {
+            View root = getWindow().getDecorView();
+            patchTripScreen(root);
+            patchHotelScreen(root);
+        } finally {
+            patching = false;
         }
     }
 
-    // Android doesn't expose an existing OnClickListener. Returning null intentionally
-    // means navigation is left untouched by patchNavigation; screen-specific buttons below
-    // are patched directly after each inherited screen is displayed.
-    private View.OnClickListener getExistingClickListenerProxy(Button b) { return null; }
-
     private void patchTripScreen(View root) {
         Button save = findButton(root, "Save current vacation");
-        if (save != null && save.getTag() == null) {
+        if (save != null && !"trailbound_safe_save".equals(save.getTag())) {
             save.setTag("trailbound_safe_save");
             save.setOnClickListener(v -> safeSaveVacation(save));
         }
 
         Button clear = findButton(root, "Clear current planner");
-        if (clear != null && clear.getTag() == null) {
+        if (clear != null && !"trailbound_clear_preserve_hotel".equals(clear.getTag())) {
             clear.setTag("trailbound_clear_preserve_hotel");
             clear.setOnClickListener(v -> {
                 clearCurrentPlannerSafely();
@@ -125,20 +108,19 @@ public class TrailboundFlowActivity extends TrailboundActivity {
         List<EditText> fields = editTexts(card);
         if (fields.size() < 3) return;
 
-        // Existing order is name, address, price. Preserve the same EditTexts but make the
-        // workflow obvious by adding an address-first helper and hiding the hotel toggle here.
         EditText hotelName = fields.get(0);
         EditText hotelAddress = fields.get(1);
         EditText hotelPrice = fields.get(2);
-        hotelAddress.setHint("Enter hotel street address");
-        hotelName.setHint("Hotel name (auto-filled when found)");
+        hotelAddress.setHint("Enter hotel street address first");
+        hotelName.setHint("Hotel name auto-fills when found");
         hotelPrice.setHint("Enter total hotel price");
 
         TextView helper = new TextView(this);
-        helper.setText("1. Enter the hotel address  •  2. Find hotel  •  3. Enter price");
+        helper.setTag("hotel_flow_helper");
+        helper.setText("1. Enter address  •  2. Find hotel  •  3. Enter price");
         helper.setTextColor(0xFFF0E8D7);
         helper.setTextSize(13);
-        helper.setPadding(0, 8, 0, 6);
+        helper.setPadding(0, 8, 0, 8);
         card.addView(helper, Math.min(1, card.getChildCount()));
 
         Button lookup = new Button(this);
@@ -148,7 +130,6 @@ public class TrailboundFlowActivity extends TrailboundActivity {
         lookup.setTextColor(0xFFFFFFFF);
         lookup.setBackgroundColor(0xFF5B7640);
         lookup.setOnClickListener(v -> lookupHotel(hotelAddress, hotelName));
-
         int addressIndex = card.indexOfChild(hotelAddress);
         card.addView(lookup, Math.min(addressIndex + 1, card.getChildCount()), new LinearLayout.LayoutParams(-1, dp(52)));
 
@@ -219,8 +200,8 @@ public class TrailboundFlowActivity extends TrailboundActivity {
             String destination = flowPrefs.getString("end", "").trim();
             o.put("name", destination.isEmpty() ? "Planned trip" : destination + " vacation");
             arr.put(o);
-            flowPrefs.edit().putString("vacations", arr.toString()).commit();
-
+            boolean ok = flowPrefs.edit().putString("vacations", arr.toString()).commit();
+            if (!ok) throw new Exception("Storage write failed");
             saveButton.setText("Saved ✓");
             Toast.makeText(this, "Vacation saved", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
