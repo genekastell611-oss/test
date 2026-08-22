@@ -9,7 +9,7 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".TrailboundFuelPlannerActivity"
+            android:name=".TrailboundGasStopMapActivity"
             android:screenOrientation="unspecified"
             android:exported="true">
             <intent-filter>
