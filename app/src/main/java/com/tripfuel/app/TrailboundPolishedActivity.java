@@ -47,9 +47,7 @@ import java.net.URLEncoder;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -59,132 +57,113 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Trailbound 7.0 presentation and hub layer.
- *
- * Keeps the audited 6.3 calculation/storage path underneath while turning the
- * native Android UI into a compact road-trip app: route dashboard, visually
- * distinct outbound/return map markers, maintenance-focused Garage, Stay hub
- * with cached hotel/area imagery and local briefing, and complete round-trip
- * discovery labeling.
- */
+/** Trailbound 7.0 app-forward presentation layer over the audited planner. */
 public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
     private static final String PREFS = "trailbound_v5";
     private static final String TRIPS = "trips";
     private static final String VEHICLES = "vehicles";
     private static final String HOTELS = "hotels";
 
-    private static final int INK = Color.rgb(12, 16, 11);
-    private static final int SURFACE = Color.rgb(22, 28, 19);
-    private static final int SURFACE_2 = Color.rgb(30, 38, 25);
-    private static final int BORDER = Color.rgb(86, 103, 69);
-    private static final int GREEN = Color.rgb(111, 143, 80);
-    private static final int GREEN_DARK = Color.rgb(70, 94, 51);
+    private static final int SURFACE = Color.rgb(28, 36, 24);
+    private static final int DEEP = Color.rgb(14, 19, 13);
+    private static final int BORDER = Color.rgb(91, 109, 73);
+    private static final int GREEN = Color.rgb(105, 139, 76);
+    private static final int GREEN_DARK = Color.rgb(68, 93, 50);
     private static final int CREAM = Color.rgb(247, 239, 220);
-    private static final int GOLD = Color.rgb(222, 169, 83);
-    private static final int BLUE = Color.rgb(74, 132, 166);
-    private static final int RED = Color.rgb(197, 86, 70);
-    private static final int MUTED = Color.rgb(205, 201, 187);
+    private static final int MUTED = Color.rgb(204, 201, 187);
+    private static final int GOLD = Color.rgb(224, 169, 78);
+    private static final int BLUE = Color.rgb(70, 132, 171);
+    private static final int RED = Color.rgb(196, 78, 66);
 
     private SharedPreferences prefs;
-    private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final Handler main = new Handler(Looper.getMainLooper());
-    private boolean patching;
-    private String lastTripMarkerSignature = "";
-    private String attemptedHotelPhoto = "";
-    private String attemptedHotelArea = "";
-
-    private final Set<Button> routeButtons = Collections.newSetFromMap(new WeakHashMap<Button, Boolean>());
-    private final Set<Button> refreshTouchButtons = Collections.newSetFromMap(new WeakHashMap<Button, Boolean>());
-    private final Set<Button> hotelSaveTouchButtons = Collections.newSetFromMap(new WeakHashMap<Button, Boolean>());
+    private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final Map<String, Drawable> markerIcons = new HashMap<>();
+    private final Set<Button> wiredButtons = Collections.newSetFromMap(new WeakHashMap<Button, Boolean>());
+    private boolean patching;
+    private String attemptedHotelPhoto = "";
+    private String attemptedAreaBrief = "";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(() -> {
-            if (!patching && !isFinishing()) patchPolish();
+            if (!patching && !isFinishing()) polish();
         });
-        main.postDelayed(this::patchPolish, 800);
+        main.postDelayed(this::polish, 650);
     }
 
     @Override protected void onResume() {
         super.onResume();
-        main.postDelayed(this::patchPolish, 500);
+        main.postDelayed(this::polish, 350);
     }
 
-    private void patchPolish() {
+    private void polish() {
         if (patching || isFinishing()) return;
         patching = true;
         try {
             View root = getWindow().getDecorView();
-            polishHeader(root);
-            polishNavigation(root);
-            polishControls(root);
+            polishShell(root);
             if (findExactText(root, "Trip profile") != null) polishTrip(root);
             else if (findExactText(root, "Vehicle profile") != null) polishVehicle(root);
             else if (findExactText(root, "Hotel profile") != null) polishHotel(root);
             else if (findExactText(root, "Linked adventure") != null) polishArea(root);
         } catch (Exception ignored) {
-            // Presentation must never be able to take down the audited planner.
+            // UI polish must never be able to crash the audited planner.
         } finally {
             patching = false;
         }
     }
 
-    private void polishHeader(View root) {
-        TextView title = findTaggedText(root, "polish_app_title");
-        if (title == null) {
-            title = findExactText(root, "TRAILBOUND");
-            if (title != null) {
-                title.setTag("polish_app_title");
-                title.setText("Trailbound");
-            }
+    // ---------- app shell ----------
+
+    private void polishShell(View root) {
+        TextView appTitle = findTaggedText(root, "polish_title");
+        if (appTitle == null) {
+            appTitle = findExactText(root, "TRAILBOUND");
+            if (appTitle != null) appTitle.setTag("polish_title");
         }
-        if (title != null) {
-            title.setTextSize(27);
-            title.setTextColor(Color.WHITE);
-            title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        if (appTitle != null) {
+            appTitle.setText("Trailbound");
+            appTitle.setTextSize(27);
+            appTitle.setTextColor(Color.WHITE);
+            appTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         }
 
-        TextView sub = findTaggedText(root, "polish_app_subtitle");
-        if (sub == null) {
-            sub = findExactText(root, "Adventure trip planner");
-            if (sub != null) sub.setTag("polish_app_subtitle");
+        TextView subtitle = findTaggedText(root, "polish_subtitle");
+        if (subtitle == null) {
+            subtitle = findExactText(root, "Adventure trip planner");
+            if (subtitle != null) subtitle.setTag("polish_subtitle");
         }
-        if (sub != null) {
-            if (findExactText(root, "Trip profile") != null) sub.setText("Route • budget • fuel • stops");
-            else if (findExactText(root, "Vehicle profile") != null) sub.setText("Garage • maintenance • readiness");
-            else if (findExactText(root, "Hotel profile") != null) sub.setText("Stay • area • nearby essentials");
-            else sub.setText("Adventure intelligence");
-            sub.setTextColor(MUTED);
+        if (subtitle != null) {
+            if (findExactText(root, "Trip profile") != null) subtitle.setText("Route • budget • fuel • stops");
+            else if (findExactText(root, "Vehicle profile") != null) subtitle.setText("Garage • maintenance • readiness");
+            else if (findExactText(root, "Hotel profile") != null) subtitle.setText("Stay • area • nearby essentials");
+            else subtitle.setText("Adventure intelligence");
+            subtitle.setTextColor(MUTED);
         }
-    }
 
-    private void polishNavigation(View root) {
-        Button trip = navButton(root, "Trip", "nav_trip", "🧭\nPlan");
-        Button cars = navButton(root, "Cars", "nav_cars", "🚙\nGarage");
-        Button hotels = navButton(root, "Hotels", "nav_hotels", "🏨\nStay");
-        Button area = navButton(root, "Area", "nav_area", "📍\nExplore");
-        Button[] all = new Button[]{trip, cars, hotels, area};
-        Button active = findExactText(root, "Trip profile") != null ? trip :
-                findExactText(root, "Vehicle profile") != null ? cars :
-                        findExactText(root, "Hotel profile") != null ? hotels : area;
-
-        LinearLayout nav = null;
-        for (Button b : all) if (b != null && b.getParent() instanceof LinearLayout) { nav = (LinearLayout) b.getParent(); break; }
-        if (nav != null) {
-            nav.setPadding(dp(6), dp(5), dp(6), dp(5));
-            nav.setBackground(round(Color.rgb(16, 21, 14), 20, Color.rgb(78, 94, 63)));
+        Button plan = dockButton(root, "Trip", "dock_plan", "🧭\nPlan");
+        Button garage = dockButton(root, "Cars", "dock_garage", "🚙\nGarage");
+        Button stay = dockButton(root, "Hotels", "dock_stay", "🏨\nStay");
+        Button explore = dockButton(root, "Area", "dock_explore", "📍\nExplore");
+        Button active = findExactText(root, "Trip profile") != null ? plan :
+                findExactText(root, "Vehicle profile") != null ? garage :
+                        findExactText(root, "Hotel profile") != null ? stay : explore;
+        Button[] dock = new Button[]{plan, garage, stay, explore};
+        LinearLayout dockParent = null;
+        for (Button b : dock) if (b != null && b.getParent() instanceof LinearLayout) { dockParent = (LinearLayout) b.getParent(); break; }
+        if (dockParent != null) {
+            dockParent.setPadding(dp(5), dp(5), dp(5), dp(5));
+            dockParent.setBackground(round(Color.rgb(15, 20, 14), 20, Color.rgb(78, 95, 62)));
         }
-        for (Button b : all) {
+        for (Button b : dock) {
             if (b == null) continue;
-            b.setAllCaps(false);
             b.setGravity(Gravity.CENTER);
             b.setTextSize(12);
             b.setTextColor(Color.WHITE);
+            b.setAllCaps(false);
             b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            b.setPadding(dp(4), dp(3), dp(4), dp(3));
             if (b.getLayoutParams() instanceof LinearLayout.LayoutParams) {
                 LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) b.getLayoutParams();
                 lp.height = dp(60);
@@ -192,314 +171,249 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
                 b.setLayoutParams(lp);
             }
             b.setBackground(round(b == active ? GREEN_DARK : Color.TRANSPARENT, 15,
-                    b == active ? Color.rgb(151, 178, 113) : Color.TRANSPARENT));
+                    b == active ? Color.rgb(151, 178, 112) : Color.TRANSPARENT));
         }
-    }
 
-    private Button navButton(View root, String original, String tag, String label) {
-        Button b = findTaggedButton(root, tag);
-        if (b == null) {
-            b = findButton(root, original);
-            if (b != null) b.setTag(tag);
-        }
-        if (b != null && !label.equals(b.getText() == null ? "" : b.getText().toString())) b.setText(label);
-        return b;
-    }
-
-    private void polishControls(View root) {
         ArrayList<EditText> fields = new ArrayList<>();
         collect(root, EditText.class, fields);
         for (EditText e : fields) {
             e.setTextColor(Color.WHITE);
-            e.setHintTextColor(Color.rgb(156, 164, 147));
+            e.setHintTextColor(Color.rgb(157, 164, 148));
             e.setTextSize(16);
             e.setPadding(dp(13), 0, dp(13), 0);
-            e.setBackground(round(Color.rgb(13, 18, 12), 14, Color.rgb(85, 102, 68)));
+            e.setBackground(round(DEEP, 14, Color.rgb(82, 101, 66)));
         }
 
         ArrayList<Spinner> spinners = new ArrayList<>();
         collect(root, Spinner.class, spinners);
         for (Spinner s : spinners) {
             try {
-                s.setBackgroundTintList(ColorStateList.valueOf(Color.rgb(117, 137, 91)));
-                s.setPopupBackgroundDrawable(round(Color.rgb(27, 34, 23), 14, Color.rgb(91, 108, 73)));
+                s.setBackgroundTintList(ColorStateList.valueOf(Color.rgb(113, 134, 88)));
+                s.setPopupBackgroundDrawable(round(Color.rgb(25, 32, 21), 14, Color.rgb(91, 109, 73)));
             } catch (Exception ignored) { }
             View selected = s.getSelectedView();
-            if (selected instanceof TextView) {
-                ((TextView) selected).setTextColor(Color.WHITE);
-                ((TextView) selected).setTextSize(15);
-            }
+            if (selected instanceof TextView) ((TextView) selected).setTextColor(Color.WHITE);
         }
 
         ArrayList<Button> buttons = new ArrayList<>();
         collect(root, Button.class, buttons);
         for (Button b : buttons) {
             Object tag = b.getTag();
-            if (tag != null && tag.toString().startsWith("nav_")) continue;
+            if (tag != null && tag.toString().startsWith("dock_")) continue;
             String text = b.getText() == null ? "" : b.getText().toString();
             b.setAllCaps(false);
-            b.setTextSize(14);
             b.setTextColor(Color.WHITE);
+            b.setTextSize(14);
             b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             b.setMinHeight(dp(48));
-            b.setPadding(dp(12), dp(5), dp(12), dp(5));
             boolean primary = text.contains("Save") || text.contains("Refresh route") || text.contains("Find hotel") ||
-                    text.contains("Choose exact EPA") || text.contains("Refresh destination") || text.contains("Refresh area briefing");
-            boolean dangerish = text.contains("new trip") || text.contains("another vehicle") || text.contains("another hotel") || text.contains("Reset checklist");
-            int fill = primary ? GREEN_DARK : dangerish ? Color.rgb(73, 56, 40) : Color.rgb(41, 49, 34);
-            int stroke = primary ? Color.rgb(152, 178, 112) : dangerish ? Color.rgb(139, 106, 72) : Color.rgb(91, 108, 73);
+                    text.contains("Choose exact EPA") || text.contains("Refresh destination");
+            boolean secondary = text.contains("another") || text.contains("new trip") || text.contains("Reset checklist");
+            int fill = primary ? GREEN_DARK : secondary ? Color.rgb(74, 57, 40) : Color.rgb(39, 48, 33);
+            int stroke = primary ? Color.rgb(151, 178, 112) : secondary ? Color.rgb(143, 108, 74) : BORDER;
             b.setBackground(round(fill, 14, stroke));
         }
     }
+
+    private Button dockButton(View root, String original, String tag, String newText) {
+        Button b = findTaggedButton(root, tag);
+        if (b == null) {
+            b = findButton(root, original);
+            if (b != null) b.setTag(tag);
+        }
+        if (b != null) b.setText(newText);
+        return b;
+    }
+
+    // ---------- Plan hub ----------
 
     private void polishTrip(View root) {
         TextView header = findExactText(root, "Trip profile");
         if (header == null || !(header.getParent() instanceof LinearLayout)) return;
         LinearLayout card = (LinearLayout) header.getParent();
+        hideIntro(card, header);
+        card.setBackground(round(Color.argb(248, 17, 23, 15), 22, Color.rgb(78, 94, 63)));
         card.setPadding(dp(14), dp(14), dp(14), dp(16));
-        card.setBackground(round(Color.argb(248, 18, 23, 16), 22, Color.rgb(78, 94, 63)));
 
-        LinearLayout hero = ensureTripHero(card);
-        updateTripHero(root, hero);
-        moveTripMapNearRoute(root, card, hero);
-        styleTripMap(root);
-        styleTripFuelPlan(root);
-        attachRoundTripDiscovery(root);
+        LinearLayout hero = findTaggedLinear(root, "trip_dashboard");
+        if (hero == null) {
+            hero = dashboard("trip_dashboard", "ROAD TRIP");
+            TextView route = bigText("Set your route"); route.setTag("trip_dash_route"); hero.addView(route, topMargin(-1, -2, 2));
+            TextView status = body(""); status.setTag("trip_dash_status"); hero.addView(status, topMargin(-1, -2, 3));
+            hero.addView(metricRow(metric("trip_dash_miles", "ROUND TRIP"), metric("trip_dash_time", "DRIVE TIME")), topMargin(-1, -2, 11));
+            hero.addView(metricRow(metric("trip_dash_auto", "AUTO BUDGET"), metric("trip_dash_safe", "CONSERVATIVE")), topMargin(-1, -2, 7));
+            TextView source = small(""); source.setTag("trip_dash_source"); hero.addView(source, topMargin(-1, -2, 8));
+            card.addView(hero, Math.min(1, card.getChildCount()), topMargin(-1, -2, 5));
+        }
+        updateTripDashboard(root, hero);
 
-        Button mapButton = findButton(root, "Map actual round trip");
-        if (mapButton != null) mapButton.setVisibility(View.GONE);
-        Button refresh = findButton(root, "Refresh route + automatic gas average");
-        if (refresh != null) {
-            refresh.setTextSize(15);
-            refresh.setMinHeight(dp(54));
-            if (!refreshTouchButtons.contains(refresh)) {
-                refreshTouchButtons.add(refresh);
-                refresh.setOnTouchListener((v, event) -> {
-                    if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
-                        main.postDelayed(this::patchPolish, 1800);
-                        main.postDelayed(this::patchPolish, 3200);
-                    }
-                    return false;
-                });
-            }
+        MapView map = firstMap(root);
+        if (map != null) {
+            LinearLayout.LayoutParams lp = map.getLayoutParams() instanceof LinearLayout.LayoutParams ?
+                    (LinearLayout.LayoutParams) map.getLayoutParams() : new LinearLayout.LayoutParams(-1, dp(310));
+            lp.height = dp(310); lp.topMargin = dp(10); lp.bottomMargin = dp(4); map.setLayoutParams(lp);
+            map.setBackground(round(Color.rgb(17, 23, 16), 18, Color.rgb(87, 105, 70)));
+            map.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+            map.setClipToOutline(true);
+            styleMap(root, map);
+            ensureMapLegend(card, map);
         }
 
+        Button rawMap = findButton(root, "Map actual round trip");
+        if (rawMap != null) rawMap.setVisibility(View.GONE);
+        Button refresh = findButton(root, "Refresh route + automatic gas average");
+        if (refresh != null && !wiredButtons.contains(refresh)) {
+            wiredButtons.add(refresh);
+            refresh.setOnTouchListener((v, event) -> {
+                if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                    main.postDelayed(this::polish, 1600);
+                    main.postDelayed(this::polish, 3000);
+                }
+                return false;
+            });
+        }
+
+        rewriteFuelPlan(root);
         TextView audited = findTaggedText(root, "audited_trip_summary");
         TextView dual = findTaggedText(root, "dual_gas_summary");
-        boolean show = prefs.getBoolean("polishTripDetails", false);
-        if (audited != null) audited.setVisibility(show ? View.VISIBLE : View.GONE);
-        if (dual != null) dual.setVisibility(show ? View.VISIBLE : View.GONE);
-        ensureTripDetailsButton(card, audited, dual);
+        boolean details = prefs.getBoolean("showTripAuditDetails", false);
+        if (audited != null) audited.setVisibility(details ? View.VISIBLE : View.GONE);
+        if (dual != null) dual.setVisibility(details ? View.VISIBLE : View.GONE);
+        ensureDetailToggle(card, audited, dual);
     }
 
-    private LinearLayout ensureTripHero(LinearLayout card) {
-        View existing = card.findViewWithTag("polish_trip_hero");
-        if (existing instanceof LinearLayout) return (LinearLayout) existing;
-        LinearLayout hero = panel("polish_trip_hero", SURFACE_2, Color.rgb(106, 128, 83));
-        TextView eyebrow = label("ROAD TRIP", 11, true, Color.rgb(185, 211, 144));
-        hero.addView(eyebrow);
-        TextView route = label("Plan your route", 22, true, Color.WHITE);
-        route.setTag("polish_trip_route");
-        hero.addView(route, topMargin(-1, -2, 3));
-        TextView status = label("", 13, false, MUTED);
-        status.setTag("polish_trip_status");
-        hero.addView(status, topMargin(-1, -2, 4));
-        hero.addView(metricRow(metric("polish_trip_distance", "ROUND TRIP"), metric("polish_trip_time", "DRIVE TIME")), topMargin(-1, -2, 12));
-        hero.addView(metricRow(metric("polish_trip_auto", "AUTO BUDGET"), metric("polish_trip_safe", "CONSERVATIVE")), topMargin(-1, -2, 8));
-        TextView source = label("", 11, false, Color.rgb(185, 190, 176));
-        source.setTag("polish_trip_source");
-        hero.addView(source, topMargin(-1, -2, 9));
-        int insert = Math.min(2, card.getChildCount());
-        card.addView(hero, insert, topMargin(-1, -2, 10));
-        return hero;
-    }
-
-    private void updateTripHero(View root, LinearLayout hero) {
+    private void updateTripDashboard(View root, LinearLayout hero) {
         JSONObject trip = activeTrip();
-        EditText fromField = exactField(root, "FROM");
-        EditText toField = exactField(root, "TO");
-        String start = text(fromField).trim();
-        String end = text(toField).trim();
-        TextView route = findTaggedText(hero, "polish_trip_route");
-        TextView status = findTaggedText(hero, "polish_trip_status");
-        TextView distance = findTaggedText(hero, "polish_trip_distance_value");
-        TextView time = findTaggedText(hero, "polish_trip_time_value");
-        TextView auto = findTaggedText(hero, "polish_trip_auto_value");
-        TextView safe = findTaggedText(hero, "polish_trip_safe_value");
-        TextView source = findTaggedText(hero, "polish_trip_source");
-        if (route != null) route.setText(shortPlace(start) + "  →  " + shortPlace(end));
-
-        boolean endpoints = !start.isEmpty() && !end.isEmpty() && start.equals(trip.optString("start", "")) && end.equals(trip.optString("end", ""));
-        boolean complete = endpoints && routeComplete(trip);
-        if (!complete) {
-            if (status != null) status.setText("Route needs refresh before Trailbound will trust mileage-based totals.");
-            setMetricValue(distance, "—"); setMetricValue(time, "—"); setMetricValue(auto, "—"); setMetricValue(safe, "—");
-            if (source != null) source.setText("Use Refresh route + automatic gas average after setting FROM and TO.");
+        String start = text(exactField(root, "FROM")).trim();
+        String end = text(exactField(root, "TO")).trim();
+        setText(findTaggedText(hero, "trip_dash_route"), shortPlace(start) + "  →  " + shortPlace(end));
+        boolean current = !start.isEmpty() && !end.isEmpty() && start.equals(trip.optString("start", "")) && end.equals(trip.optString("end", ""));
+        if (!current || !routeComplete(trip)) {
+            setText(findTaggedText(hero, "trip_dash_status"), "Refresh the route before trusting mileage, fuel stops, or trip totals.");
+            setMetric(findTaggedText(hero, "trip_dash_miles_value"), "—");
+            setMetric(findTaggedText(hero, "trip_dash_time_value"), "—");
+            setMetric(findTaggedText(hero, "trip_dash_auto_value"), "—");
+            setMetric(findTaggedText(hero, "trip_dash_safe_value"), "—");
+            setText(findTaggedText(hero, "trip_dash_source"), "Your saved profiles remain intact while the route refreshes.");
             return;
         }
 
         double out = positive(trip.optString("outMiles", "0"));
         double back = positive(trip.optString("backMiles", "0"));
-        double round = out + back;
+        double roundMiles = out + back;
         double hours = positive(trip.optString("outHours", "0")) + positive(trip.optString("backHours", "0"));
         JSONObject vehicle = linkedVehicle(root, trip);
         JSONObject hotel = linkedHotel(root, trip);
         double mpg = TrailboundTripMath.adjustedMpg(positive(vehicle.optString("mpg", "0")), positive(vehicle.optString("payload", "0")));
-        double gallons = TrailboundTripMath.gallonsConsumed(round, mpg);
+        double gallons = TrailboundTripMath.gallonsConsumed(roundMiles, mpg);
         double avgPrice = positive(text(exactField(root, "PREPARED GAS $ / GAL")));
-        double conservative = positive(text(findTaggedEditText(root, "conservative_gas_field")));
+        double safePrice = positive(text(findTaggedEditText(root, "conservative_gas_field")));
         double snacks = positive(text(exactField(root, "SNACKS & DRINKS")));
         double extras = positive(text(exactField(root, "OTHER TRIP MONEY")));
-        CheckBox include = findCheckBoxContaining(root, "Include linked hotel");
-        boolean hotelIncluded = include != null && include.isChecked();
+        CheckBox includeHotel = findCheckBoxContaining(root, "Include linked hotel");
+        boolean include = includeHotel != null && includeHotel.isChecked();
         double hotelCost = positive(hotel.optString("cost", "0"));
-        double avgTotal = TrailboundTripMath.tripTotal(gallons * avgPrice, snacks, extras, hotelCost, hotelIncluded);
-        double safeTotal = TrailboundTripMath.tripTotal(gallons * conservative, snacks, extras, hotelCost, hotelIncluded);
-        List<Double> stops = TrailboundTripMath.fuelStopMiles(round, mpg,
+        double avgTotal = TrailboundTripMath.tripTotal(gallons * avgPrice, snacks, extras, hotelCost, include);
+        double safeTotal = TrailboundTripMath.tripTotal(gallons * safePrice, snacks, extras, hotelCost, include);
+        List<Double> stops = TrailboundTripMath.fuelStopMiles(roundMiles, mpg,
                 positive(text(exactField(root, "Tank size (gal)"))), positive(text(exactField(root, "Departure gas (gal)"))));
-        int outStops = 0, backStops = 0;
-        for (double mile : stops) { if (mile <= out) outStops++; else backStops++; }
+        int outboundStops = 0, returnStops = 0;
+        for (double mile : stops) { if (mile <= out) outboundStops++; else returnStops++; }
 
-        if (status != null) status.setText(one(out) + " mi out • " + one(back) + " mi back • fuel stops " + outStops + " out / " + backStops + " back");
-        setMetricValue(distance, one(round) + " mi");
-        setMetricValue(time, hours > 0 ? one(hours) + " hr" : "—");
-        setMetricValue(auto, avgPrice > 0 ? money(avgTotal) : "—");
-        setMetricValue(safe, conservative > 0 ? money(safeTotal) : "Set price");
-        if (source != null) {
-            String gasSource = trip.optString("gasSource", "").trim();
-            source.setText((avgPrice > 0 ? "Automatic " + money(avgPrice) + "/gal" : "Automatic gas unavailable") +
-                    (gasSource.isEmpty() ? "" : " • " + gasSource));
-        }
+        setText(findTaggedText(hero, "trip_dash_status"), one(out) + " mi out • " + one(back) + " mi back • fuel " + outboundStops + " out / " + returnStops + " back");
+        setMetric(findTaggedText(hero, "trip_dash_miles_value"), one(roundMiles) + " mi");
+        setMetric(findTaggedText(hero, "trip_dash_time_value"), hours > 0 ? one(hours) + " hr" : "—");
+        setMetric(findTaggedText(hero, "trip_dash_auto_value"), avgPrice > 0 ? money(avgTotal) : "—");
+        setMetric(findTaggedText(hero, "trip_dash_safe_value"), safePrice > 0 ? money(safeTotal) : "Set price");
+        String source = trip.optString("gasSource", "").trim();
+        setText(findTaggedText(hero, "trip_dash_source"), (avgPrice > 0 ? "Automatic " + money(avgPrice) + "/gal" : "Automatic gas unavailable") + (source.isEmpty() ? "" : " • " + source));
     }
 
-    private void moveTripMapNearRoute(View root, LinearLayout card, LinearLayout hero) {
-        MapView map = firstMap(root);
-        EditText to = exactField(root, "TO");
-        if (map == null || map.getParent() != card || to == null || to.getParent() != card) return;
-        int desired = card.indexOfChild(to) + 1;
-        if (desired < 0) desired = card.indexOfChild(hero) + 1;
-        int current = card.indexOfChild(map);
-        if (current != desired && current != desired - 1) {
-            card.removeView(map);
-            card.addView(map, Math.min(desired, card.getChildCount()), new LinearLayout.LayoutParams(-1, dp(300)));
-        } else if (map.getLayoutParams() instanceof LinearLayout.LayoutParams) {
-            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) map.getLayoutParams();
-            lp.height = dp(300);
-            lp.topMargin = dp(10);
-            lp.bottomMargin = dp(7);
-            map.setLayoutParams(lp);
-        }
-        map.setBackground(round(Color.rgb(17, 23, 17), 18, Color.rgb(88, 106, 71)));
-        map.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
-        map.setClipToOutline(true);
-
-        TextView legend = findTaggedText(root, "polish_map_legend");
-        if (legend == null) {
-            legend = label("🟢 Start   🔴 Destination   🟠 Outbound fuel   🔵 Return fuel", 11, true, CREAM);
-            legend.setTag("polish_map_legend");
-            legend.setGravity(Gravity.CENTER);
-            int idx = card.indexOfChild(map);
-            card.addView(legend, Math.min(idx + 1, card.getChildCount()), topMargin(-1, -2, 3));
-        }
-    }
-
-    private void styleTripMap(View root) {
+    private void styleMap(View root, MapView map) {
         JSONObject trip = activeTrip();
-        MapView map = firstMap(root);
-        if (map == null || !routeComplete(trip)) return;
-        String signature = trip.optString("id", "") + "|" + trip.optString("routeOut", "").hashCode() + "|" + trip.optString("routeBack", "").hashCode() + "|" +
-                text(exactField(root, "Tank size (gal)")) + "|" + text(exactField(root, "Departure gas (gal)"));
-
-        int polylineIndex = 0;
-        ArrayList<Overlay> removeFuel = new ArrayList<>();
+        if (!routeComplete(trip)) return;
+        int line = 0;
+        ArrayList<Overlay> remove = new ArrayList<>();
         for (Overlay overlay : map.getOverlays()) {
             if (overlay instanceof Polyline) {
                 Polyline p = (Polyline) overlay;
-                if (polylineIndex == 0) { p.getOutlinePaint().setColor(GOLD); p.getOutlinePaint().setStrokeWidth(dp(5)); }
-                else if (polylineIndex == 1) { p.getOutlinePaint().setColor(BLUE); p.getOutlinePaint().setStrokeWidth(dp(4)); }
-                polylineIndex++;
+                if (line == 0) { p.getOutlinePaint().setColor(GOLD); p.getOutlinePaint().setStrokeWidth(dp(5)); }
+                else if (line == 1) { p.getOutlinePaint().setColor(BLUE); p.getOutlinePaint().setStrokeWidth(dp(4)); }
+                line++;
             } else if (overlay instanceof Marker) {
                 Marker m = (Marker) overlay;
                 String title = m.getTitle() == null ? "" : m.getTitle();
-                if ("Start / Return".equals(title)) {
-                    m.setIcon(markerIcon(GREEN, "S"));
-                    m.setSnippet("Trip start • return point");
-                } else if ("Destination".equals(title)) {
-                    m.setIcon(markerIcon(RED, "D"));
-                    m.setSnippet("Destination • outbound turnaround point");
-                } else if (title.toLowerCase(Locale.US).startsWith("fuel stop ")) {
-                    removeFuel.add(overlay);
-                }
+                if ("Start / Return".equals(title)) { m.setIcon(markerIcon(GREEN, "S")); m.setSnippet("Trip start • final return point"); }
+                else if ("Destination".equals(title)) { m.setIcon(markerIcon(RED, "D")); m.setSnippet("Destination • turnaround point"); }
+                else if (title.toLowerCase(Locale.US).startsWith("fuel stop ")) remove.add(overlay);
             }
         }
-        map.getOverlays().removeAll(removeFuel);
+        map.getOverlays().removeAll(remove);
 
-        double outMiles = positive(trip.optString("outMiles", "0"));
-        double backMiles = positive(trip.optString("backMiles", "0"));
-        double roundMiles = outMiles + backMiles;
+        double out = positive(trip.optString("outMiles", "0"));
+        double roundMiles = out + positive(trip.optString("backMiles", "0"));
         JSONObject vehicle = linkedVehicle(root, trip);
         double mpg = TrailboundTripMath.adjustedMpg(positive(vehicle.optString("mpg", "0")), positive(vehicle.optString("payload", "0")));
-        double tank = positive(text(exactField(root, "Tank size (gal)"));
-        double depart = positive(text(exactField(root, "Departure gas (gal)"));
+        double tank = positive(text(exactField(root, "Tank size (gal)")));
+        double depart = positive(text(exactField(root, "Departure gas (gal)")));
         List<Double> stops = TrailboundTripMath.fuelStopMiles(roundMiles, mpg, tank, depart);
-        ArrayList<GeoPoint> geometry = roundTripGeometry(trip);
+        ArrayList<GeoPoint> route = roundTripGeometry(trip);
         for (int i = 0; i < stops.size(); i++) {
             double mile = stops.get(i);
-            GeoPoint point = pointAtTripMile(geometry, roundMiles, mile);
+            GeoPoint point = pointAtFraction(route, roundMiles > 0 ? mile / roundMiles : 0);
             if (point == null) continue;
-            boolean returning = mile > outMiles;
-            double legMile = returning ? mile - outMiles : mile;
-            Marker marker = new Marker(map);
-            marker.setPosition(point);
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-            marker.setIcon(markerIcon(returning ? BLUE : GOLD, "G"));
-            marker.setTitle("Fuel stop " + (i + 1) + (returning ? " • RETURN" : " • OUTBOUND"));
-            marker.setSnippet((returning ? "Return leg" : "Outbound") + " around leg mile " + Math.round(legMile) + " • round-trip mile " + Math.round(mile));
-            marker.setRelatedObject("polished_fuel_stop");
-            map.getOverlays().add(marker);
+            boolean returning = mile > out;
+            Marker m = new Marker(map);
+            m.setPosition(point);
+            m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+            m.setIcon(markerIcon(returning ? BLUE : GOLD, "G"));
+            m.setTitle("Fuel stop " + (i + 1) + (returning ? " • RETURN" : " • OUTBOUND"));
+            m.setSnippet((returning ? "Return leg mile " + Math.round(mile - out) : "Outbound mile " + Math.round(mile)) + " • round-trip mile " + Math.round(mile));
+            m.setRelatedObject("polished_fuel");
+            map.getOverlays().add(m);
         }
-        lastTripMarkerSignature = signature;
         map.invalidate();
     }
 
-    private void styleTripFuelPlan(View root) {
+    private void ensureMapLegend(LinearLayout card, MapView map) {
+        if (card.findViewWithTag("map_legend") != null || map.getParent() != card) return;
+        TextView legend = small("🟢 Start   🔴 Destination   🟠 Outbound fuel   🔵 Return fuel");
+        legend.setTag("map_legend"); legend.setGravity(Gravity.CENTER);
+        int index = card.indexOfChild(map);
+        card.addView(legend, Math.min(index + 1, card.getChildCount()), topMargin(-1, -2, 3));
+    }
+
+    private void rewriteFuelPlan(View root) {
         TextView plan = findTaggedText(root, "trailbound_fuel_plan_text");
         JSONObject trip = activeTrip();
         if (plan == null || !routeComplete(trip)) return;
         double out = positive(trip.optString("outMiles", "0"));
-        double round = out + positive(trip.optString("backMiles", "0"));
+        double roundMiles = out + positive(trip.optString("backMiles", "0"));
         JSONObject vehicle = linkedVehicle(root, trip);
         double mpg = TrailboundTripMath.adjustedMpg(positive(vehicle.optString("mpg", "0")), positive(vehicle.optString("payload", "0")));
-        List<Double> stops = TrailboundTripMath.fuelStopMiles(round, mpg,
+        List<Double> stops = TrailboundTripMath.fuelStopMiles(roundMiles, mpg,
                 positive(text(exactField(root, "Tank size (gal)"))), positive(text(exactField(root, "Departure gas (gal)"))));
-        ArrayList<String> outbound = new ArrayList<>(), returning = new ArrayList<>();
+        ArrayList<String> there = new ArrayList<>(), back = new ArrayList<>();
         for (double mile : stops) {
-            if (mile <= out) outbound.add(mile < 1 ? "before departure" : "mile " + Math.round(mile));
-            else returning.add("mile " + Math.round(mile - out) + " after destination");
+            if (mile <= out) there.add(mile < 1 ? "before departure" : "mile " + Math.round(mile));
+            else back.add("mile " + Math.round(mile - out) + " after destination");
         }
-        String outText = outbound.isEmpty() ? "No planned fill-up" : joinStrings(outbound);
-        String backText = returning.isEmpty() ? "No planned fill-up" : joinStrings(returning);
-        plan.setText("FUEL STOPS\nOUTBOUND  •  " + outText + "\nRETURN  •  " + backText + "\nReserve target: about 15% of tank.");
-        plan.setBackground(round(Color.rgb(20, 27, 18), 15, Color.rgb(91, 111, 72)));
+        plan.setText("FUEL PLAN\nOUTBOUND • " + (there.isEmpty() ? "No planned fill-up" : join(there)) +
+                "\nRETURN • " + (back.isEmpty() ? "No planned fill-up" : join(back)) + "\nReserve target: about 15% of tank.");
+        plan.setBackground(round(Color.rgb(20, 27, 18), 15, Color.rgb(92, 111, 73)));
     }
 
-    private void ensureTripDetailsButton(LinearLayout card, TextView audited, TextView dual) {
-        View existing = card.findViewWithTag("polish_trip_details_button");
+    private void ensureDetailToggle(LinearLayout card, TextView audited, TextView dual) {
+        View existing = card.findViewWithTag("trip_details_toggle");
         if (existing instanceof Button) {
-            ((Button) existing).setText(prefs.getBoolean("polishTripDetails", false) ? "Hide calculation details" : "Show calculation details");
+            ((Button) existing).setText(prefs.getBoolean("showTripAuditDetails", false) ? "Hide calculation details" : "Show calculation details");
             return;
         }
-        Button b = new Button(this);
-        b.setTag("polish_trip_details_button");
-        b.setText(prefs.getBoolean("polishTripDetails", false) ? "Hide calculation details" : "Show calculation details");
-        b.setAllCaps(false);
-        b.setTextColor(Color.WHITE);
-        b.setTextSize(13);
-        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        b.setBackground(round(Color.rgb(38, 46, 32), 14, Color.rgb(88, 104, 71)));
+        Button b = compactButton(prefs.getBoolean("showTripAuditDetails", false) ? "Hide calculation details" : "Show calculation details");
+        b.setTag("trip_details_toggle");
         b.setOnClickListener(v -> {
-            boolean show = !prefs.getBoolean("polishTripDetails", false);
-            prefs.edit().putBoolean("polishTripDetails", show).apply();
+            boolean show = !prefs.getBoolean("showTripAuditDetails", false);
+            prefs.edit().putBoolean("showTripAuditDetails", show).apply();
             if (audited != null) audited.setVisibility(show ? View.VISIBLE : View.GONE);
             if (dual != null) dual.setVisibility(show ? View.VISIBLE : View.GONE);
             b.setText(show ? "Hide calculation details" : "Show calculation details");
@@ -507,505 +421,321 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         card.addView(b, topMargin(-1, dp(48), 10));
     }
 
-    private void attachRoundTripDiscovery(View root) {
-        String[][] pairs = new String[][]{
-                {"Scenic & viewpoints", "Scenic"}, {"Food & coffee", "Food"}, {"Parks & landmarks", "Parks"},
-                {"Rest areas", "Rest"}, {"Supplies & pharmacy", "Supplies"}, {"Useful towns", "Towns"},
-                {"Fuel near planned fill-up points", "FuelStops"}
-        };
-        for (String[] pair : pairs) {
-            Button b = findButton(root, pair[0]);
-            if (b == null || routeButtons.contains(b)) continue;
-            routeButtons.add(b);
-            String category = pair[1];
-            b.setOnClickListener(v -> searchCompleteRoute(category));
-        }
-    }
-
-    private void searchCompleteRoute(String category) {
-        JSONObject trip = activeTrip();
-        if (!routeComplete(trip)) { toast("Refresh the complete round trip first"); return; }
-        TextView box = findTaggedText(getWindow().getDecorView(), "route_discovery_results");
-        if (box != null) box.setText("Searching outbound + return route…");
-        io.execute(() -> {
-            try {
-                ArrayList<GeoPoint> route = roundTripGeometry(trip);
-                double routeMiles = positive(trip.optString("outMiles", "0")) + positive(trip.optString("backMiles", "0"));
-                ArrayList<RouteAnchor> anchors = "FuelStops".equals(category) ? polishedFuelAnchors(trip, route) : routeAnchors(route);
-                JSONArray found = overpassRoundTrip(anchors, discoveryFilters(category), "FuelStops".equals(category) ? 12000 : 9000, route, routeMiles, trip);
-                String id = trip.optString("id", "");
-                JSONObject byCategory;
-                try { byCategory = new JSONObject(trip.optString("routePlacesByCategory", "{}")); }
-                catch (Exception e) { byCategory = new JSONObject(); }
-                byCategory.put(category, found);
-                persistProfileField(TRIPS, id, "routePlacesByCategory", byCategory.toString());
-                persistProfileField(TRIPS, id, "routePlaces", found.toString());
-                persistProfileField(TRIPS, id, "routePlacesCategory", category);
-                runOnUiThread(() -> plotRoundTripPlaces(found, category, trip));
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    TextView result = findTaggedText(getWindow().getDecorView(), "route_discovery_results");
-                    if (result != null) result.setText("Route discovery is unavailable right now. Saved trip data is unchanged.");
-                });
-            }
-        });
-    }
-
-    private ArrayList<RouteAnchor> routeAnchors(List<GeoPoint> route) {
-        ArrayList<RouteAnchor> out = new ArrayList<>();
-        for (double f : new double[]{0.08, 0.22, 0.38, 0.50, 0.62, 0.78, 0.92}) {
-            GeoPoint p = pointAtFraction(route, f);
-            if (p != null) out.add(new RouteAnchor(p.getLatitude(), p.getLongitude()));
-        }
-        return out;
-    }
-
-    private ArrayList<RouteAnchor> polishedFuelAnchors(JSONObject trip, List<GeoPoint> route) {
-        ArrayList<RouteAnchor> out = new ArrayList<>();
-        double outbound = positive(trip.optString("outMiles", "0"));
-        double round = outbound + positive(trip.optString("backMiles", "0"));
-        JSONObject vehicle = profileById(VEHICLES, trip.optString("vehicleId", prefs.getString("activeVehicleId", "")));
-        double mpg = TrailboundTripMath.adjustedMpg(positive(vehicle.optString("mpg", "0")), positive(vehicle.optString("payload", "0")));
-        double tank = positive(trip.optString("tankSize", prefs.getString("fuelTankSize", "0")));
-        double depart = positive(trip.optString("departureFuel", prefs.getString("departureFuel", "0")));
-        for (double mile : TrailboundTripMath.fuelStopMiles(round, mpg, tank, depart)) {
-            GeoPoint p = pointAtTripMile(route, round, mile);
-            if (p != null) out.add(new RouteAnchor(p.getLatitude(), p.getLongitude()));
-            if (out.size() >= 12) break;
-        }
-        if (out.isEmpty()) out.addAll(routeAnchors(route));
-        return out;
-    }
-
-    private JSONArray overpassRoundTrip(List<RouteAnchor> anchors, List<String> filters, int radius,
-                                        List<GeoPoint> route, double routeMiles, JSONObject trip) throws Exception {
-        StringBuilder q = new StringBuilder("[out:json][timeout:25];(");
-        for (RouteAnchor a : anchors) {
-            for (String filter : filters) {
-                q.append("node(around:").append(radius).append(',').append(a.lat).append(',').append(a.lon).append(')').append(filter).append(';');
-                q.append("way(around:").append(radius).append(',').append(a.lat).append(',').append(a.lon).append(')').append(filter).append(';');
-                q.append("relation(around:").append(radius).append(',').append(a.lat).append(',').append(a.lon).append(')').append(filter).append(';');
-            }
-        }
-        q.append(");out center tags 140;");
-        JSONObject json = new JSONObject(http("https://overpass-api.de/api/interpreter?data=" + enc(q.toString())));
-        JSONArray elements = json.optJSONArray("elements");
-        Set<String> seen = new HashSet<>();
-        ArrayList<RoutePlace> places = new ArrayList<>();
-        double outMiles = positive(trip.optString("outMiles", "0"));
-        if (elements != null) {
-            for (int i = 0; i < elements.length(); i++) {
-                JSONObject el = elements.optJSONObject(i); if (el == null) continue;
-                double lat = el.optDouble("lat", Double.NaN), lon = el.optDouble("lon", Double.NaN);
-                JSONObject center = el.optJSONObject("center");
-                if ((Double.isNaN(lat) || Double.isNaN(lon)) && center != null) {
-                    lat = center.optDouble("lat", Double.NaN); lon = center.optDouble("lon", Double.NaN);
-                }
-                if (Double.isNaN(lat) || Double.isNaN(lon)) continue;
-                String name = placeName(el.optJSONObject("tags"));
-                if (name.isEmpty()) continue;
-                String key = name.toLowerCase(Locale.US) + "|" + Math.round(lat * 10000) + "|" + Math.round(lon * 10000);
-                if (!seen.add(key)) continue;
-                double mile = nearestScaledMile(route, routeMiles, lat, lon);
-                String leg = mile > outMiles ? "Return" : "Outbound";
-                places.add(new RoutePlace(name, lat, lon, mile, leg));
-            }
-        }
-        Collections.sort(places, Comparator.comparingDouble(p -> p.mile));
-        JSONArray out = new JSONArray();
-        for (int i = 0; i < places.size() && i < 28; i++) {
-            RoutePlace p = places.get(i);
-            JSONObject o = new JSONObject();
-            o.put("name", p.name); o.put("lat", p.lat); o.put("lon", p.lon); o.put("mile", p.mile); o.put("leg", p.leg);
-            out.put(o);
-        }
-        return out;
-    }
-
-    private void plotRoundTripPlaces(JSONArray places, String category, JSONObject trip) {
-        MapView map = firstMap(getWindow().getDecorView());
-        TextView box = findTaggedText(getWindow().getDecorView(), "route_discovery_results");
-        if (map == null) return;
-        ArrayList<Overlay> remove = new ArrayList<>();
-        for (Overlay overlay : map.getOverlays()) {
-            if (overlay instanceof Marker) {
-                Object related = ((Marker) overlay).getRelatedObject();
-                if ("route_discovery".equals(related) || "polish_route_discovery".equals(related)) remove.add(overlay);
-            }
-        }
-        map.getOverlays().removeAll(remove);
-        StringBuilder text = new StringBuilder();
-        double outMiles = positive(trip.optString("outMiles", "0"));
-        for (int i = 0; i < places.length(); i++) {
-            JSONObject o = places.optJSONObject(i); if (o == null) continue;
-            String name = o.optString("name", "Place");
-            double mile = o.optDouble("mile", 0);
-            String leg = o.optString("leg", mile > outMiles ? "Return" : "Outbound");
-            Marker m = new Marker(map);
-            m.setPosition(new GeoPoint(o.optDouble("lat", 0), o.optDouble("lon", 0)));
-            m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-            m.setIcon(markerIcon("Return".equals(leg) ? BLUE : GOLD, "•"));
-            m.setTitle(name);
-            m.setSnippet(leg + " • round-trip mile " + Math.round(mile));
-            m.setRelatedObject("polish_route_discovery");
-            map.getOverlays().add(m);
-            if (i < 14) {
-                if (text.length() > 0) text.append('\n');
-                text.append("• ").append(name).append(" — ").append(leg).append(" • mile ").append(Math.round(mile));
-            }
-        }
-        map.invalidate();
-        if (box != null) box.setText(places.length() + " saved " + routeCategoryLabel(category) + " results across outbound + return:\n" + text);
-        toast(places.length() == 0 ? "No named results found in this round-trip corridor." : "Found " + places.length() + " round-trip stops.");
-    }
+    // ---------- Garage hub ----------
 
     private void polishVehicle(View root) {
         TextView header = findExactText(root, "Vehicle profile");
         if (header == null || !(header.getParent() instanceof LinearLayout)) return;
         LinearLayout card = (LinearLayout) header.getParent();
-        card.setBackground(round(Color.argb(248, 18, 23, 16), 22, Color.rgb(78, 94, 63)));
+        hideIntro(card, header);
+        card.setBackground(round(Color.argb(248, 17, 23, 15), 22, Color.rgb(78, 94, 63)));
 
-        ImageView image = firstImage(card);
-        if (image != null) {
-            LinearLayout.LayoutParams lp = image.getLayoutParams() instanceof LinearLayout.LayoutParams ?
-                    (LinearLayout.LayoutParams) image.getLayoutParams() : new LinearLayout.LayoutParams(-1, dp(220));
-            lp.height = dp(225); lp.topMargin = dp(8); lp.bottomMargin = dp(10); image.setLayoutParams(lp);
-            image.setBackground(round(Color.rgb(24, 31, 21), 20, Color.rgb(93, 112, 74)));
-            image.setOutlineProvider(ViewOutlineProvider.BACKGROUND); image.setClipToOutline(true);
+        ImageView vehiclePhoto = firstImage(card);
+        if (vehiclePhoto != null) {
+            LinearLayout.LayoutParams lp = vehiclePhoto.getLayoutParams() instanceof LinearLayout.LayoutParams ?
+                    (LinearLayout.LayoutParams) vehiclePhoto.getLayoutParams() : new LinearLayout.LayoutParams(-1, dp(225));
+            lp.height = dp(225); lp.topMargin = dp(7); lp.bottomMargin = dp(9); vehiclePhoto.setLayoutParams(lp);
+            vehiclePhoto.setBackground(round(SURFACE, 20, BORDER));
+            vehiclePhoto.setOutlineProvider(ViewOutlineProvider.BACKGROUND); vehiclePhoto.setClipToOutline(true);
         }
 
-        LinearLayout dash = ensureVehicleDashboard(card, image);
-        updateVehicleDashboard(root, dash);
-        insertVehicleSectionLabels(root, card);
-        ensureServiceLogAction(root, card);
+        LinearLayout oldHub = findTaggedLinear(root, "vehicle_hub_panel");
+        if (oldHub != null) oldHub.setVisibility(View.GONE);
 
-        LinearLayout hub = findTaggedLinear(root, "vehicle_hub_panel");
-        if (hub != null) hub.setBackground(round(Color.rgb(25, 33, 22), 18, Color.rgb(94, 115, 74)));
+        LinearLayout dash = findTaggedLinear(root, "garage_dashboard");
+        if (dash == null) {
+            dash = dashboard("garage_dashboard", "GARAGE REPORT");
+            TextView name = bigText("Your vehicle"); name.setTag("garage_name"); dash.addView(name, topMargin(-1, -2, 2));
+            TextView state = body(""); state.setTag("garage_state"); dash.addView(state, topMargin(-1, -2, 3));
+            dash.addView(metricRow(metric("garage_odometer", "ODOMETER"), metric("garage_service", "SERVICE")), topMargin(-1, -2, 11));
+            dash.addView(metricRow(metric("garage_mpg", "LOADED MPG"), metric("garage_safety", "SAFETY")), topMargin(-1, -2, 7));
+            TextView linked = small(""); linked.setTag("garage_linked"); dash.addView(linked, topMargin(-1, -2, 9));
+            int insert = vehiclePhoto != null && vehiclePhoto.getParent() == card ? card.indexOfChild(vehiclePhoto) + 1 : Math.min(1, card.getChildCount());
+            card.addView(dash, Math.max(0, insert), topMargin(-1, -2, 4));
+        }
+        updateGarage(root, dash);
+        sectionBefore(root, card, "YEAR", "garage_vehicle_details", "VEHICLE DETAILS");
+        sectionBefore(root, card, "CURRENT MILEAGE", "garage_maintenance", "MAINTENANCE & REPORTING");
+        ensureServiceButton(root, card);
+
         LinearLayout safety = findTaggedLinear(root, "vehicle_safety_section");
-        if (safety != null) safety.setBackground(round(Color.rgb(39, 34, 23), 18, Color.rgb(145, 117, 72)));
+        if (safety != null) safety.setBackground(round(Color.rgb(40, 34, 23), 18, Color.rgb(145, 117, 72)));
     }
 
-    private LinearLayout ensureVehicleDashboard(LinearLayout card, ImageView image) {
-        View existing = card.findViewWithTag("polish_vehicle_dashboard");
-        if (existing instanceof LinearLayout) return (LinearLayout) existing;
-        LinearLayout dash = panel("polish_vehicle_dashboard", SURFACE_2, Color.rgb(104, 127, 81));
-        dash.addView(label("GARAGE REPORT", 11, true, Color.rgb(186, 211, 146)));
-        TextView name = label("Your vehicle", 22, true, Color.WHITE); name.setTag("polish_vehicle_name"); dash.addView(name, topMargin(-1, -2, 3));
-        TextView state = label("", 13, false, MUTED); state.setTag("polish_vehicle_state"); dash.addView(state, topMargin(-1, -2, 4));
-        dash.addView(metricRow(metric("polish_vehicle_odometer", "ODOMETER"), metric("polish_vehicle_service", "SERVICE")), topMargin(-1, -2, 12));
-        dash.addView(metricRow(metric("polish_vehicle_mpg", "LOADED MPG"), metric("polish_vehicle_checks", "SAFETY")), topMargin(-1, -2, 8));
-        TextView linked = label("", 12, false, CREAM); linked.setTag("polish_vehicle_linked"); dash.addView(linked, topMargin(-1, -2, 10));
-        int insert = image != null && image.getParent() == card ? card.indexOfChild(image) + 1 : Math.min(2, card.getChildCount());
-        card.addView(dash, Math.max(0, Math.min(insert, card.getChildCount())), topMargin(-1, -2, 4));
-        return dash;
-    }
-
-    private void updateVehicleDashboard(View root, LinearLayout dash) {
+    private void updateGarage(View root, LinearLayout dash) {
         JSONObject vehicle = activeVehicle();
         String year = text(exactField(root, "YEAR"), vehicle.optString("year", ""));
         String make = text(exactField(root, "MAKE"), vehicle.optString("make", ""));
         String model = text(exactField(root, "MODEL"), vehicle.optString("model", ""));
-        String name = (year + " " + make + " " + model).trim(); if (name.isEmpty()) name = "Unsaved vehicle";
+        String name = (year + " " + make + " " + model).trim();
+        if (name.isEmpty()) name = "Unsaved vehicle";
         double od = positive(text(exactField(root, "CURRENT MILEAGE"), vehicle.optString("odometer", "0")));
         double due = positive(text(exactField(root, "NEXT OIL CHANGE DUE AT"), vehicle.optString("nextOil", "0")));
-        EditText intervalField = findTaggedEditText(root, "oil_service_interval_field");
-        double interval = positive(text(intervalField, vehicle.optString("oilInterval", "5000"))); if (interval <= 0) interval = 5000;
         double base = positive(text(exactField(root, "EPA COMBINED MPG"), vehicle.optString("mpg", "0")));
         double payload = positive(text(exactField(root, "TRIP PAYLOAD (LB)"), vehicle.optString("payload", "0")));
         double loaded = TrailboundTripMath.adjustedMpg(base, payload);
         int checks = 0, totalChecks = 0;
         ArrayList<CheckBox> boxes = new ArrayList<>(); collect(root, CheckBox.class, boxes);
-        for (CheckBox b : boxes) {
-            Object tag = b.getTag();
-            if (tag != null && tag.toString().startsWith("vehicle_safety_")) { totalChecks++; if (b.isChecked()) checks++; }
+        for (CheckBox box : boxes) {
+            Object tag = box.getTag();
+            if (tag != null && tag.toString().startsWith("vehicle_safety_")) { totalChecks++; if (box.isChecked()) checks++; }
         }
-        JSONObject trip = linkedTripForVehicle(vehicle.optString("id", prefs.getString("activeVehicleId", "")));
-        double round = positive(trip.optString("outMiles", "0")) + positive(trip.optString("backMiles", "0"));
-        long serviceMiles = Math.round(due - od);
-        String service = due <= 0 ? "Not set" : serviceMiles <= 0 ? "Due now" : serviceMiles + " mi";
+        JSONObject trip = linkedTrip(vehicle.optString("id", prefs.getString("activeVehicleId", "")));
+        double roundMiles = positive(trip.optString("outMiles", "0")) + positive(trip.optString("backMiles", "0"));
+        long remaining = Math.round(due - od);
+        String service = due <= 0 ? "Not set" : remaining <= 0 ? "Due now" : remaining + " mi";
         String state = due > 0 && due <= od ? "Service due before departure" :
-                due > 0 && round > 0 && due <= od + round ? "Service comes due during linked trip" : "Vehicle planning data looks current";
-        setText(findTaggedText(dash, "polish_vehicle_name"), name);
-        setText(findTaggedText(dash, "polish_vehicle_state"), state);
-        setMetricValue(findTaggedText(dash, "polish_vehicle_odometer_value"), Math.round(od) + " mi");
-        setMetricValue(findTaggedText(dash, "polish_vehicle_service_value"), service);
-        setMetricValue(findTaggedText(dash, "polish_vehicle_mpg_value"), one(loaded));
-        setMetricValue(findTaggedText(dash, "polish_vehicle_checks_value"), totalChecks > 0 ? checks + "/" + totalChecks : "—");
-        TextView linked = findTaggedText(dash, "polish_vehicle_linked");
-        if (linked != null) {
-            if (trip.optString("id", "").isEmpty()) linked.setText("No trip linked yet • payload " + Math.round(payload) + " lb • service interval " + Math.round(interval) + " mi");
-            else linked.setText("Linked: " + shortPlace(trip.optString("end", "Trip")) + (round > 0 ? " • " + one(round) + " mi round trip" : "") +
-                    " • projected odometer " + Math.round(od + round) + " mi");
-        }
+                due > 0 && roundMiles > 0 && due <= od + roundMiles ? "Service comes due during linked trip" : "Maintenance planning looks current";
+        setText(findTaggedText(dash, "garage_name"), name);
+        setText(findTaggedText(dash, "garage_state"), state);
+        setMetric(findTaggedText(dash, "garage_odometer_value"), Math.round(od) + " mi");
+        setMetric(findTaggedText(dash, "garage_service_value"), service);
+        setMetric(findTaggedText(dash, "garage_mpg_value"), one(loaded));
+        setMetric(findTaggedText(dash, "garage_safety_value"), totalChecks > 0 ? checks + "/" + totalChecks : "—");
+        if (trip.optString("id", "").isEmpty()) setText(findTaggedText(dash, "garage_linked"), "No trip linked • payload " + Math.round(payload) + " lb");
+        else setText(findTaggedText(dash, "garage_linked"), "Linked to " + shortPlace(trip.optString("end", "Trip")) +
+                (roundMiles > 0 ? " • " + one(roundMiles) + " mi • post-trip odometer " + Math.round(od + roundMiles) + " mi" : ""));
     }
 
-    private void insertVehicleSectionLabels(View root, LinearLayout card) {
-        insertHeadingBefore(root, card, "YEAR", "polish_vehicle_details_heading", "VEHICLE DETAILS");
-        insertHeadingBefore(root, card, "CURRENT MILEAGE", "polish_vehicle_maintenance_heading", "MAINTENANCE & MILEAGE");
-    }
-
-    private void ensureServiceLogAction(View root, LinearLayout card) {
-        if (card.findViewWithTag("polish_log_service") != null) return;
+    private void ensureServiceButton(View root, LinearLayout card) {
+        if (card.findViewWithTag("log_service_button") != null) return;
         EditText interval = findTaggedEditText(root, "oil_service_interval_field");
         if (interval == null || interval.getParent() != card) return;
-        Button b = new Button(this);
-        b.setTag("polish_log_service");
-        b.setText("Log oil/service completed now");
-        b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        Button b = compactButton("Log oil/service completed now");
+        b.setTag("log_service_button");
         b.setBackground(round(GREEN_DARK, 14, Color.rgb(151, 178, 112)));
         int index = card.indexOfChild(interval) + 1;
         card.addView(b, Math.min(index, card.getChildCount()), topMargin(-1, dp(50), 8));
-        b.setOnClickListener(v -> confirmServiceLog());
+        b.setOnClickListener(v -> confirmService());
     }
 
-    private void confirmServiceLog() {
+    private void confirmService() {
         View root = getWindow().getDecorView();
         double od = positive(text(exactField(root, "CURRENT MILEAGE")));
         double interval = positive(text(findTaggedEditText(root, "oil_service_interval_field")));
         if (od <= 0 || interval <= 0) { toast("Enter current mileage and service interval first"); return; }
         new AlertDialog.Builder(this)
                 .setTitle("Record completed service?")
-                .setMessage("Trailbound will record service at " + Math.round(od) + " mi and set the next due mileage to " + Math.round(od + interval) + " mi.")
-                .setPositiveButton("Record service", (d, w) -> recordService(od, interval))
+                .setMessage("Record service at " + Math.round(od) + " mi and set the next due mileage to " + Math.round(od + interval) + " mi?")
+                .setPositiveButton("Record", (dialog, which) -> recordService(od, interval))
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
-    private void recordService(double odometer, double interval) {
+    private void recordService(double od, double interval) {
         String id = prefs.getString("activeVehicleId", "");
-        EditText dueField = exactField(getWindow().getDecorView(), "NEXT OIL CHANGE DUE AT");
-        String next = String.valueOf(Math.round(odometer + interval));
-        if (dueField != null) dueField.setText(next);
+        String next = String.valueOf(Math.round(od + interval));
+        EditText due = exactField(getWindow().getDecorView(), "NEXT OIL CHANGE DUE AT");
+        if (due != null) due.setText(next);
         if (!id.isEmpty()) {
+            JSONObject vehicle = profileById(VEHICLES, id);
             try {
-                JSONObject vehicle = profileById(VEHICLES, id);
                 JSONArray history;
                 try { history = new JSONArray(vehicle.optString("serviceHistory", "[]")); }
                 catch (Exception e) { history = new JSONArray(); }
                 JSONObject event = new JSONObject();
-                event.put("mileage", Math.round(odometer));
-                event.put("type", "Oil/service interval reset");
+                event.put("type", "Oil/service completed");
+                event.put("mileage", Math.round(od));
                 event.put("timestamp", System.currentTimeMillis());
                 history.put(event);
-                persistProfileField(VEHICLES, id, "serviceHistory", history.toString());
-                persistProfileField(VEHICLES, id, "lastServiceMileage", String.valueOf(Math.round(odometer)));
-                persistProfileField(VEHICLES, id, "lastServiceAt", System.currentTimeMillis());
-                persistProfileField(VEHICLES, id, "nextOil", next);
-                persistProfileField(VEHICLES, id, "oilInterval", String.valueOf(Math.round(interval)));
+                saveField(VEHICLES, id, "serviceHistory", history.toString());
+                saveField(VEHICLES, id, "lastServiceMileage", String.valueOf(Math.round(od)));
+                saveField(VEHICLES, id, "lastServiceAt", System.currentTimeMillis());
+                saveField(VEHICLES, id, "nextOil", next);
+                saveField(VEHICLES, id, "oilInterval", String.valueOf(Math.round(interval)));
             } catch (Exception ignored) { }
         }
         toast("Service recorded • next due at " + next + " mi");
-        main.postDelayed(this::patchPolish, 200);
+        main.postDelayed(this::polish, 200);
     }
+
+    // ---------- Stay hub ----------
 
     private void polishHotel(View root) {
         TextView header = findExactText(root, "Hotel profile");
         if (header == null || !(header.getParent() instanceof LinearLayout)) return;
         LinearLayout card = (LinearLayout) header.getParent();
-        card.setBackground(round(Color.argb(248, 18, 23, 16), 22, Color.rgb(78, 94, 63)));
+        hideIntro(card, header);
+        card.setBackground(round(Color.argb(248, 17, 23, 15), 22, Color.rgb(78, 94, 63)));
 
-        LinearLayout hero = ensureHotelHero(card);
-        updateHotelHub(root, hero);
-        moveHotelMapIntoHub(root, card, hero);
-        loadHotelPhoto(false);
-        maybeRefreshHotelArea();
+        LinearLayout hub = findTaggedLinear(root, "stay_dashboard");
+        if (hub == null) {
+            hub = dashboard("stay_dashboard", "STAY HUB");
+            ImageView photo = new ImageView(this);
+            photo.setTag("stay_photo"); photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            photo.setBackground(round(SURFACE, 18, BORDER)); photo.setOutlineProvider(ViewOutlineProvider.BACKGROUND); photo.setClipToOutline(true);
+            hub.addView(photo, topMargin(-1, dp(215), 7));
+            TextView credit = small("No hotel/area photo cached yet"); credit.setTag("stay_photo_credit"); hub.addView(credit, topMargin(-1, -2, 4));
+            TextView name = bigText("Your stay"); name.setTag("stay_name"); hub.addView(name, topMargin(-1, -2, 8));
+            TextView address = body(""); address.setTag("stay_address"); hub.addView(address, topMargin(-1, -2, 2));
+            hub.addView(metricRow(metric("stay_cost", "STAY COST"), metric("stay_nearby", "SAVED NEARBY")), topMargin(-1, -2, 10));
+            TextView brief = body("Save a hotel to build local information."); brief.setTag("stay_area_brief"); brief.setLineSpacing(0, 1.12f); hub.addView(brief, topMargin(-1, -2, 9));
+            LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
+            Button photoButton = compactButton("Refresh photo"); Button areaButton = compactButton("Refresh area briefing");
+            actions.addView(photoButton, weight()); actions.addView(areaButton, weight()); hub.addView(actions, topMargin(-1, dp(50), 8));
+            photoButton.setOnClickListener(v -> loadStayPhoto(true));
+            areaButton.setOnClickListener(v -> refreshAreaBrief(true));
+            card.addView(hub, Math.min(1, card.getChildCount()), topMargin(-1, -2, 5));
+        }
+        updateStayHub(root, hub);
 
-        Button save = findButton(root, "Save hotel profile");
-        if (save == null) save = findButton(root, "Hotel saved ✓");
-        if (save != null && !hotelSaveTouchButtons.contains(save)) {
-            hotelSaveTouchButtons.add(save);
+        MapView map = firstMap(root);
+        if (map != null) {
+            if (map.getParent() != hub) {
+                if (map.getParent() instanceof ViewGroup) ((ViewGroup) map.getParent()).removeView(map);
+                int photoIndex = childIndexByTag(hub, "stay_photo");
+                hub.addView(map, Math.min(photoIndex + 2, hub.getChildCount()), topMargin(-1, dp(230), 8));
+            }
+            map.setBackground(round(Color.rgb(17, 23, 16), 18, BORDER));
+            map.setOutlineProvider(ViewOutlineProvider.BACKGROUND); map.setClipToOutline(true);
+            for (Overlay overlay : map.getOverlays()) if (overlay instanceof Marker) {
+                Marker m = (Marker) overlay;
+                if (m.getRelatedObject() == null && m.getTitle() != null) m.setIcon(markerIcon(RED, "H"));
+            }
+        }
+
+        Button save = firstButton(root, "Save new hotel profile", "Update hotel profile", "Hotel saved ✓");
+        if (save != null && !wiredButtons.contains(save)) {
+            wiredButtons.add(save);
             save.setOnTouchListener((v, event) -> {
                 if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
-                    main.postDelayed(this::patchPolish, 500);
-                    main.postDelayed(() -> loadHotelPhoto(false), 800);
+                    main.postDelayed(this::polish, 500);
+                    main.postDelayed(() -> loadStayPhoto(false), 800);
                 }
                 return false;
             });
         }
-
-        LinearLayout extra = findTaggedLinear(root, "hotel_discovery_extra");
-        if (extra != null) extra.setBackgroundColor(Color.TRANSPARENT);
+        loadStayPhoto(false);
+        maybeAreaBrief();
     }
 
-    private LinearLayout ensureHotelHero(LinearLayout card) {
-        View existing = card.findViewWithTag("polish_hotel_hub");
-        if (existing instanceof LinearLayout) return (LinearLayout) existing;
-        LinearLayout hero = panel("polish_hotel_hub", SURFACE_2, Color.rgb(104, 127, 81));
-        hero.addView(label("STAY HUB", 11, true, Color.rgb(186, 211, 146)));
-        ImageView photo = new ImageView(this);
-        photo.setTag("polish_hotel_photo");
-        photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        photo.setBackground(round(Color.rgb(29, 35, 27), 18, Color.rgb(95, 111, 80)));
-        photo.setOutlineProvider(ViewOutlineProvider.BACKGROUND); photo.setClipToOutline(true);
-        hero.addView(photo, topMargin(-1, dp(220), 8));
-        TextView caption = label("No hotel photo cached yet", 11, false, MUTED); caption.setTag("polish_hotel_photo_caption"); hero.addView(caption, topMargin(-1, -2, 5));
-        TextView name = label("Your stay", 22, true, Color.WHITE); name.setTag("polish_hotel_name"); hero.addView(name, topMargin(-1, -2, 8));
-        TextView address = label("", 13, false, MUTED); address.setTag("polish_hotel_address"); hero.addView(address, topMargin(-1, -2, 3));
-        hero.addView(metricRow(metric("polish_hotel_cost", "STAY COST"), metric("polish_hotel_nearby", "SAVED NEARBY")), topMargin(-1, -2, 12));
-        TextView area = label("Add/save the hotel to build a local briefing.", 13, false, CREAM);
-        area.setTag("polish_hotel_area"); area.setLineSpacing(0, 1.12f); area.setPadding(0, dp(8), 0, dp(3)); hero.addView(area);
-        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-        Button photoBtn = compactAction("Refresh hotel photo");
-        Button areaBtn = compactAction("Refresh area briefing");
-        actions.addView(photoBtn, weightedButtonLp()); actions.addView(areaBtn, weightedButtonLp());
-        hero.addView(actions, topMargin(-1, dp(52), 10));
-        photoBtn.setOnClickListener(v -> loadHotelPhoto(true));
-        areaBtn.setOnClickListener(v -> refreshHotelArea(true));
-        int insert = Math.min(2, card.getChildCount());
-        card.addView(hero, insert, topMargin(-1, -2, 10));
-        return hero;
-    }
-
-    private void updateHotelHub(View root, LinearLayout hero) {
+    private void updateStayHub(View root, LinearLayout hub) {
         JSONObject hotel = activeHotel();
-        String name = text(exactField(root, "HOTEL NAME"), hotel.optString("name", ""));
-        String address = text(exactField(root, "HOTEL ADDRESS"), hotel.optString("address", ""));
+        String name = text(exactField(root, "HOTEL NAME"), hotel.optString("name", "")).trim();
+        String address = text(exactField(root, "HOTEL ADDRESS"), hotel.optString("address", "")).trim();
         double cost = positive(text(exactField(root, "TOTAL HOTEL PRICE"), hotel.optString("cost", "0")));
-        JSONArray nearby;
-        try { nearby = new JSONArray(hotel.optString("nearbyPlaces", "[]")); }
-        catch (Exception e) { nearby = new JSONArray(); }
-        setText(findTaggedText(hero, "polish_hotel_name"), name.isEmpty() ? "Your stay" : name);
-        setText(findTaggedText(hero, "polish_hotel_address"), address.isEmpty() ? "Find and save a hotel address" : address);
-        setMetricValue(findTaggedText(hero, "polish_hotel_cost_value"), cost > 0 ? money(cost) : "—");
-        setMetricValue(findTaggedText(hero, "polish_hotel_nearby_value"), String.valueOf(nearby.length()));
-        TextView area = findTaggedText(hero, "polish_hotel_area");
-        if (area != null) {
-            String briefing = hotel.optString("areaBriefing", "").trim();
-            if (briefing.isEmpty()) briefing = "Use the saved hotel as your local base for weather, nearby food, fuel, shopping, medical needs, parks, attractions and practical area context.";
-            area.setText(briefing);
-        }
-        TextView caption = findTaggedText(hero, "polish_hotel_photo_caption");
-        if (caption != null) {
-            String kind = hotel.optString("hotelPhotoKind", "");
-            String credit = hotel.optString("hotelPhotoCredit", "");
-            String license = hotel.optString("hotelPhotoLicense", "");
-            if (!kind.isEmpty()) caption.setText(kind + (credit.isEmpty() ? "" : " • " + cleanCredit(credit)) + (license.isEmpty() ? "" : " • " + license));
-        }
+        int nearby = 0; try { nearby = new JSONArray(hotel.optString("nearbyPlaces", "[]")).length(); } catch (Exception ignored) { }
+        setText(findTaggedText(hub, "stay_name"), name.isEmpty() ? "Your stay" : name);
+        setText(findTaggedText(hub, "stay_address"), address.isEmpty() ? "Find and save a hotel address" : address);
+        setMetric(findTaggedText(hub, "stay_cost_value"), cost > 0 ? money(cost) : "—");
+        setMetric(findTaggedText(hub, "stay_nearby_value"), String.valueOf(nearby));
+        String brief = hotel.optString("areaBriefing", "").trim();
+        if (brief.isEmpty()) brief = "Your saved hotel becomes the local anchor for weather, food, fuel, shopping, medical needs, parks, attractions and practical area context.";
+        setText(findTaggedText(hub, "stay_area_brief"), brief);
+        String kind = hotel.optString("hotelPhotoKind", "");
+        String license = hotel.optString("hotelPhotoLicense", "");
+        String credit = hotel.optString("hotelPhotoCredit", "");
+        if (!kind.isEmpty()) setText(findTaggedText(hub, "stay_photo_credit"), kind + (credit.isEmpty() ? "" : " • " + shorten(stripHtml(credit), 36)) + (license.isEmpty() ? "" : " • " + license));
     }
 
-    private void moveHotelMapIntoHub(View root, LinearLayout card, LinearLayout hero) {
-        MapView map = firstMap(root);
-        if (map == null) return;
-        if (map.getParent() != hero) {
-            if (map.getParent() instanceof ViewGroup) ((ViewGroup) map.getParent()).removeView(map);
-            int imageIndex = indexOfTag(hero, "polish_hotel_photo");
-            int insert = imageIndex >= 0 ? imageIndex + 2 : Math.min(3, hero.getChildCount());
-            hero.addView(map, Math.min(insert, hero.getChildCount()), topMargin(-1, dp(235), 9));
-        }
-        map.setBackground(round(Color.rgb(17, 23, 17), 18, Color.rgb(88, 106, 71)));
-        map.setOutlineProvider(ViewOutlineProvider.BACKGROUND); map.setClipToOutline(true);
-        for (Overlay overlay : map.getOverlays()) {
-            if (overlay instanceof Marker) {
-                Marker m = (Marker) overlay;
-                if (m.getTitle() != null && !m.getTitle().isEmpty() && m.getRelatedObject() == null) m.setIcon(markerIcon(RED, "H"));
-            }
-        }
-    }
-
-    private void loadHotelPhoto(boolean userRequested) {
+    private void loadStayPhoto(boolean userRequested) {
         View root = getWindow().getDecorView();
-        ImageView image = findTaggedImage(root, "polish_hotel_photo");
+        ImageView image = findTaggedImage(root, "stay_photo");
         if (image == null) return;
         String id = prefs.getString("activeHotelId", "");
         JSONObject hotel = profileById(HOTELS, id);
-        String storageId = id.isEmpty() ? "draft" : id;
-        File cached = new File(getFilesDir(), hotelImageFile(storageId));
+        String storage = id.isEmpty() ? "draft" : id;
+        File cached = new File(getFilesDir(), hotelImageFile(storage));
         if (cached.exists()) {
-            Bitmap bm = BitmapFactory.decodeFile(cached.getAbsolutePath());
-            if (bm != null) { image.setImageBitmap(bm); updateHotelHub(root, findTaggedLinear(root, "polish_hotel_hub")); return; }
+            Bitmap bitmap = BitmapFactory.decodeFile(cached.getAbsolutePath());
+            if (bitmap != null) image.setImageBitmap(bitmap);
+            return;
         }
         String name = text(exactField(root, "HOTEL NAME"), hotel.optString("name", "")).trim();
         String address = text(exactField(root, "HOTEL ADDRESS"), hotel.optString("address", "")).trim();
         if (name.isEmpty() && address.isEmpty()) return;
-        String sig = storageId + "|" + name + "|" + address;
-        if (!userRequested && sig.equals(attemptedHotelPhoto)) return;
-        attemptedHotelPhoto = sig;
-        if (userRequested) toast("Finding a hotel or area photo…");
+        String signature = storage + "|" + name + "|" + address;
+        if (!userRequested && signature.equals(attemptedHotelPhoto)) return;
+        attemptedHotelPhoto = signature;
+        if (userRequested) toast("Finding a useful stay photo…");
         io.execute(() -> {
             try {
-                String locality = hotel.optString("areaLocality", "");
                 PhotoResult result = null;
-                if (!name.isEmpty() && !"Hotel".equalsIgnoreCase(name)) result = commonsPhoto(name + (locality.isEmpty() ? "" : " " + locality));
-                String kind = "Hotel photo";
-                if (result == null) {
-                    String areaQuery = !locality.isEmpty() ? locality + " " + hotel.optString("areaState", "") : areaQueryFromAddress(address);
-                    result = commonsPhoto(areaQuery);
-                    kind = "Area photo";
+                String kind = "Area photo";
+                if (!name.isEmpty() && !"Hotel".equalsIgnoreCase(name)) {
+                    result = commonsPhoto(name + " " + areaQuery(address), name);
+                    if (result != null && result.hotelMatch) kind = "Hotel photo";
+                    else result = null;
                 }
-                if (result == null) throw new Exception("No photo");
-                Bitmap bm = downloadBitmap(result.url);
-                if (bm == null) throw new Exception("Image decode");
-                try (FileOutputStream out = openFileOutput(hotelImageFile(storageId), MODE_PRIVATE)) { bm.compress(Bitmap.CompressFormat.JPEG, 90, out); }
-                final PhotoResult photo = result; final String photoKind = kind; final Bitmap finalBm = bm;
+                if (result == null) result = commonsPhoto(areaQuery(address), "");
+                if (result == null) throw new Exception("photo");
+                Bitmap bitmap = downloadBitmap(result.url);
+                if (bitmap == null) throw new Exception("decode");
+                try (FileOutputStream out = openFileOutput(hotelImageFile(storage), MODE_PRIVATE)) { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out); }
+                final PhotoResult chosen = result; final String finalKind = kind; final Bitmap finalBitmap = bitmap;
                 if (!id.isEmpty()) {
-                    persistProfileField(HOTELS, id, "hotelPhotoKind", photoKind);
-                    persistProfileField(HOTELS, id, "hotelPhotoCredit", photo.credit);
-                    persistProfileField(HOTELS, id, "hotelPhotoLicense", photo.license);
-                    persistProfileField(HOTELS, id, "hotelPhotoSource", photo.source);
+                    saveField(HOTELS, id, "hotelPhotoKind", finalKind);
+                    saveField(HOTELS, id, "hotelPhotoCredit", chosen.credit);
+                    saveField(HOTELS, id, "hotelPhotoLicense", chosen.license);
+                    saveField(HOTELS, id, "hotelPhotoSource", chosen.source);
                 }
                 runOnUiThread(() -> {
-                    ImageView target = findTaggedImage(getWindow().getDecorView(), "polish_hotel_photo");
-                    if (target != null) target.setImageBitmap(finalBm);
-                    LinearLayout hub = findTaggedLinear(getWindow().getDecorView(), "polish_hotel_hub");
-                    if (hub != null) updateHotelHub(getWindow().getDecorView(), hub);
-                    if (userRequested) toast(photoKind + " cached for this stay");
+                    ImageView target = findTaggedImage(getWindow().getDecorView(), "stay_photo");
+                    if (target != null) target.setImageBitmap(finalBitmap);
+                    LinearLayout hub = findTaggedLinear(getWindow().getDecorView(), "stay_dashboard");
+                    if (hub != null) updateStayHub(getWindow().getDecorView(), hub);
+                    if (userRequested) toast(finalKind + " saved to this stay");
                 });
             } catch (Exception e) {
-                if (userRequested) runOnUiThread(() -> toast("No useful hotel/area photo found right now"));
+                if (userRequested) runOnUiThread(() -> toast("No useful hotel or area photo found right now"));
             }
         });
     }
 
-    private PhotoResult commonsPhoto(String query) {
+    private PhotoResult commonsPhoto(String query, String hotelName) {
         if (query == null || query.trim().isEmpty()) return null;
         try {
-            String api = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=16&gsrsearch=" + enc(query) +
+            String api = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=18&gsrsearch=" + enc(query) +
                     "&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=1200&format=json&origin=*";
-            JSONObject pages = new JSONObject(http(api)).optJSONObject("query");
+            JSONObject queryObj = new JSONObject(http(api)).optJSONObject("query");
+            JSONObject pages = queryObj == null ? null : queryObj.optJSONObject("pages");
             if (pages == null) return null;
-            pages = pages.optJSONObject("pages"); if (pages == null) return null;
             Iterator<String> keys = pages.keys();
+            String target = normalize(hotelName);
             while (keys.hasNext()) {
-                JSONObject p = pages.optJSONObject(keys.next()); if (p == null) continue;
-                String title = p.optString("title", "").toLowerCase(Locale.US);
-                if (title.contains("logo") || title.contains("icon") || title.contains("map of") || title.contains("coat of arms") || title.contains("flag of")) continue;
-                JSONArray info = p.optJSONArray("imageinfo"); if (info == null || info.length() == 0) continue;
-                JSONObject ii = info.optJSONObject(0); if (ii == null) continue;
-                String url = ii.optString("thumburl", ii.optString("url", "")); if (url.isEmpty()) continue;
-                JSONObject meta = ii.optJSONObject("extmetadata");
-                String artist = metaValue(meta, "Artist");
+                JSONObject page = pages.optJSONObject(keys.next()); if (page == null) continue;
+                String title = page.optString("title", "");
+                String lower = title.toLowerCase(Locale.US);
+                if (lower.contains("logo") || lower.contains("map of") || lower.contains("coat of arms") || lower.contains("flag of")) continue;
+                JSONArray info = page.optJSONArray("imageinfo"); if (info == null || info.length() == 0) continue;
+                JSONObject image = info.optJSONObject(0); if (image == null) continue;
+                String url = image.optString("thumburl", image.optString("url", "")); if (url.isEmpty()) continue;
+                JSONObject meta = image.optJSONObject("extmetadata");
+                String credit = metaValue(meta, "Artist");
                 String license = metaValue(meta, "LicenseShortName");
-                String source = ii.optString("descriptionurl", "");
-                return new PhotoResult(url, stripHtml(artist), stripHtml(license), source);
+                String source = image.optString("descriptionurl", "");
+                boolean match = target.isEmpty() || normalize(title).contains(target) || target.contains(normalize(title.replace("File:", "")));
+                if (!target.isEmpty() && !match) continue;
+                return new PhotoResult(url, stripHtml(credit), stripHtml(license), source, !target.isEmpty() && match);
             }
         } catch (Exception ignored) { }
         return null;
     }
 
-    private void maybeRefreshHotelArea() {
+    private void maybeAreaBrief() {
         String id = prefs.getString("activeHotelId", "");
         if (id.isEmpty()) return;
         JSONObject hotel = profileById(HOTELS, id);
-        if (hotel.optString("areaBriefing", "").isEmpty() && !id.equals(attemptedHotelArea)) {
-            attemptedHotelArea = id;
-            refreshHotelArea(false);
+        if (hotel.optString("areaBriefing", "").isEmpty() && !id.equals(attemptedAreaBrief)) {
+            attemptedAreaBrief = id;
+            refreshAreaBrief(false);
         }
     }
 
-    private void refreshHotelArea(boolean userRequested) {
+    private void refreshAreaBrief(boolean userRequested) {
         String id = prefs.getString("activeHotelId", "");
         JSONObject hotel = profileById(HOTELS, id);
         double lat = signed(hotel.optString("lat", prefs.getString("draftHotelLat", "0")));
         double lon = signed(hotel.optString("lon", prefs.getString("draftHotelLon", "0")));
-        if (lat == 0 && lon == 0) { if (userRequested) toast("Find and save the hotel address first"); return; }
-        if (userRequested) toast("Refreshing local stay briefing…");
+        if (lat == 0 && lon == 0) { if (userRequested) toast("Find and save the hotel first"); return; }
+        if (userRequested) toast("Refreshing stay-area briefing…");
         io.execute(() -> {
             try {
                 JSONObject reverse = new JSONObject(http("https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=10&lat=" + lat + "&lon=" + lon));
-                JSONObject a = reverse.optJSONObject("address");
-                String locality = firstNonEmpty(a, "city", "town", "village", "municipality", "hamlet");
-                String county = a == null ? "" : a.optString("county", "");
-                String state = a == null ? "" : a.optString("state", "");
+                JSONObject address = reverse.optJSONObject("address");
+                String city = firstValue(address, "city", "town", "village", "municipality", "hamlet");
+                String county = address == null ? "" : address.optString("county", "");
+                String state = address == null ? "" : address.optString("state", "");
                 String weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon +
                         "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&wind_speed_unit=mph&forecast_days=1&timezone=auto";
                 JSONObject weather = new JSONObject(http(weatherUrl));
@@ -1015,61 +745,57 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
                 double feels = current == null ? Double.NaN : current.optDouble("apparent_temperature", Double.NaN);
                 double wind = current == null ? Double.NaN : current.optDouble("wind_speed_10m", Double.NaN);
                 int code = current == null ? -1 : current.optInt("weather_code", -1);
-                double hi = arrayDouble(daily, "temperature_2m_max");
-                double lo = arrayDouble(daily, "temperature_2m_min");
-                double precip = arrayDouble(daily, "precipitation_probability_max");
-                int nearbyCount = 0;
-                try { nearbyCount = new JSONArray(hotel.optString("nearbyPlaces", "[]")).length(); } catch (Exception ignored) { }
-                String category = hotel.optString("nearbyPlacesCategory", "");
-                StringBuilder brief = new StringBuilder();
-                brief.append("AREA BRIEF • ").append(locality.isEmpty() ? state : locality + (state.isEmpty() ? "" : ", " + state));
-                if (!county.isEmpty()) brief.append(" • ").append(county);
+                double hi = firstArray(daily, "temperature_2m_max");
+                double lo = firstArray(daily, "temperature_2m_min");
+                double precip = firstArray(daily, "precipitation_probability_max");
+                int nearby = 0; try { nearby = new JSONArray(hotel.optString("nearbyPlaces", "[]")).length(); } catch (Exception ignored) { }
+                StringBuilder b = new StringBuilder();
+                b.append("AREA BRIEF • ").append(city.isEmpty() ? state : city + (state.isEmpty() ? "" : ", " + state));
+                if (!county.isEmpty()) b.append(" • ").append(county);
                 if (!Double.isNaN(temp)) {
-                    brief.append("\nNow ").append(Math.round(temp)).append("°F");
-                    if (!Double.isNaN(feels)) brief.append(" • feels ").append(Math.round(feels)).append("°F");
-                    String w = weatherLabel(code); if (!w.isEmpty()) brief.append(" • ").append(w);
-                    if (!Double.isNaN(wind)) brief.append(" • wind ").append(Math.round(wind)).append(" mph");
+                    b.append("\nNow ").append(Math.round(temp)).append("°F");
+                    if (!Double.isNaN(feels)) b.append(" • feels ").append(Math.round(feels)).append("°F");
+                    String label = weather(code); if (!label.isEmpty()) b.append(" • ").append(label);
+                    if (!Double.isNaN(wind)) b.append(" • wind ").append(Math.round(wind)).append(" mph");
                 }
                 if (!Double.isNaN(hi) && !Double.isNaN(lo)) {
-                    brief.append("\nToday ").append(Math.round(hi)).append("° / ").append(Math.round(lo)).append("°");
-                    if (!Double.isNaN(precip)) brief.append(" • precip ").append(Math.round(precip)).append('%');
+                    b.append("\nToday ").append(Math.round(hi)).append("° / ").append(Math.round(lo)).append("°");
+                    if (!Double.isNaN(precip)) b.append(" • precip ").append(Math.round(precip)).append('%');
                 }
-                brief.append("\nNearby saved: ").append(nearbyCount).append(" places");
-                if (!category.isEmpty()) brief.append(" • last category: ").append(category);
-                final String briefing = brief.toString();
+                b.append("\nSaved nearby places: ").append(nearby);
+                String category = hotel.optString("nearbyPlacesCategory", "");
+                if (!category.isEmpty()) b.append(" • last search: ").append(category);
+                final String brief = b.toString();
                 if (!id.isEmpty()) {
-                    persistProfileField(HOTELS, id, "areaBriefing", briefing);
-                    persistProfileField(HOTELS, id, "areaLocality", locality);
-                    persistProfileField(HOTELS, id, "areaState", state);
-                    persistProfileField(HOTELS, id, "areaUpdatedAt", System.currentTimeMillis());
+                    saveField(HOTELS, id, "areaBriefing", brief);
+                    saveField(HOTELS, id, "areaLocality", city);
+                    saveField(HOTELS, id, "areaState", state);
+                    saveField(HOTELS, id, "areaUpdatedAt", System.currentTimeMillis());
                 }
                 runOnUiThread(() -> {
-                    LinearLayout hub = findTaggedLinear(getWindow().getDecorView(), "polish_hotel_hub");
-                    if (hub != null) {
-                        TextView area = findTaggedText(hub, "polish_hotel_area");
-                        if (area != null) area.setText(briefing);
-                    }
-                    if (userRequested) toast("Stay briefing refreshed");
+                    TextView view = findTaggedText(getWindow().getDecorView(), "stay_area_brief");
+                    if (view != null) view.setText(brief);
+                    if (userRequested) toast("Stay-area briefing refreshed");
                 });
             } catch (Exception e) {
-                if (userRequested) runOnUiThread(() -> toast("Area briefing is unavailable right now"));
+                if (userRequested) runOnUiThread(() -> toast("Area briefing unavailable right now"));
             }
         });
     }
+
+    // ---------- Explore hub ----------
 
     private void polishArea(View root) {
         TextView header = findExactText(root, "Linked adventure");
         if (header == null || !(header.getParent() instanceof LinearLayout)) return;
         LinearLayout card = (LinearLayout) header.getParent();
-        card.setBackground(round(Color.argb(248, 18, 23, 16), 22, Color.rgb(78, 94, 63)));
-        View existing = card.findViewWithTag("polish_area_snapshot");
-        LinearLayout panel;
-        if (existing instanceof LinearLayout) panel = (LinearLayout) existing;
-        else {
-            panel = panel("polish_area_snapshot", SURFACE_2, Color.rgb(103, 126, 80));
-            panel.addView(label("ADVENTURE SNAPSHOT", 11, true, Color.rgb(186, 211, 146)));
-            TextView summary = label("", 15, false, Color.WHITE); summary.setTag("polish_area_snapshot_text"); summary.setLineSpacing(0, 1.14f); panel.addView(summary, topMargin(-1, -2, 7));
-            card.addView(panel, Math.min(1, card.getChildCount()), topMargin(-1, -2, 8));
+        header.setVisibility(View.GONE);
+        card.setBackground(round(Color.argb(248, 17, 23, 15), 22, Color.rgb(78, 94, 63)));
+        LinearLayout dash = findTaggedLinear(root, "explore_dashboard");
+        if (dash == null) {
+            dash = dashboard("explore_dashboard", "ADVENTURE SNAPSHOT");
+            TextView text = body(""); text.setTag("explore_summary"); text.setTextSize(15); text.setTextColor(Color.WHITE); text.setLineSpacing(0, 1.14f); dash.addView(text, topMargin(-1, -2, 6));
+            card.addView(dash, Math.min(1, card.getChildCount()), topMargin(-1, -2, 5));
         }
         JSONObject trip = activeTrip();
         JSONObject vehicle = profileById(VEHICLES, trip.optString("vehicleId", prefs.getString("activeVehicleId", "")));
@@ -1079,105 +805,40 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         int routePlaces = 0, hotelPlaces = 0;
         try { routePlaces = new JSONArray(trip.optString("routePlaces", "[]")).length(); } catch (Exception ignored) { }
         try { hotelPlaces = new JSONArray(hotel.optString("nearbyPlaces", "[]")).length(); } catch (Exception ignored) { }
-        TextView summary = findTaggedText(panel, "polish_area_snapshot_text");
-        if (summary != null) summary.setText(shortPlace(trip.optString("start", "Start")) + " → " + shortPlace(trip.optString("end", "Destination")) +
+        setText(findTaggedText(dash, "explore_summary"), shortPlace(trip.optString("start", "Start")) + " → " + shortPlace(trip.optString("end", "Destination")) +
                 (miles > 0 ? "\n" + one(miles) + " mi round trip" : "") + (hours > 0 ? " • " + one(hours) + " hr" : "") +
-                "\nVehicle: " + vehicle.optString("label", "No vehicle linked") + "\nStay: " + hotel.optString("label", "No hotel linked") +
-                "\nSaved discoveries: " + routePlaces + " route • " + hotelPlaces + " near hotel");
+                "\nGarage: " + vehicle.optString("label", "No vehicle linked") + "\nStay: " + hotel.optString("label", "No hotel linked") +
+                "\nSaved discoveries: " + routePlaces + " along route • " + hotelPlaces + " near stay");
     }
 
-    private LinearLayout panel(String tag, int fill, int stroke) {
-        LinearLayout p = new LinearLayout(this);
-        p.setTag(tag); p.setOrientation(LinearLayout.VERTICAL); p.setPadding(dp(14), dp(14), dp(14), dp(14));
-        p.setBackground(round(fill, 18, stroke));
-        return p;
-    }
-
-    private LinearLayout metricRow(View left, View right) {
-        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
-        row.addView(left, weightedMetricLp()); row.addView(right, weightedMetricLp()); return row;
-    }
-
-    private LinearLayout metric(String tag, String title) {
-        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(11), dp(10), dp(11), dp(10));
-        box.setBackground(round(Color.rgb(15, 20, 13), 14, Color.rgb(72, 88, 59)));
-        box.addView(label(title, 10, true, Color.rgb(173, 184, 158)));
-        TextView value = label("—", 18, true, Color.WHITE); value.setTag(tag + "_value"); box.addView(value, topMargin(-1, -2, 2));
-        box.setTag(tag); return box;
-    }
-
-    private LinearLayout.LayoutParams weightedMetricLp() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1); lp.setMargins(dp(3), 0, dp(3), 0); return lp;
-    }
-
-    private LinearLayout.LayoutParams weightedButtonLp() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -1, 1); lp.setMargins(dp(3), 0, dp(3), 0); return lp;
-    }
-
-    private Button compactAction(String text) {
-        Button b = new Button(this); b.setText(text); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(13); b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        b.setBackground(round(Color.rgb(48, 59, 39), 14, Color.rgb(103, 124, 81))); return b;
-    }
-
-    private TextView label(String text, int sp, boolean bold, int color) {
-        TextView t = new TextView(this); t.setText(text); t.setTextSize(sp); t.setTextColor(color); if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); return t;
-    }
-
-    private void insertHeadingBefore(View root, LinearLayout card, String fieldLabel, String tag, String title) {
-        if (card.findViewWithTag(tag) != null) return;
-        TextView anchor = findExactText(root, fieldLabel); if (anchor == null || anchor.getParent() != card) return;
-        TextView h = label(title, 12, true, Color.rgb(187, 211, 147)); h.setTag(tag);
-        int index = card.indexOfChild(anchor); card.addView(h, Math.max(0, index), topMargin(-1, -2, 16));
-    }
-
-    private Drawable markerIcon(int color, String text) {
-        String key = color + "|" + text;
-        Drawable cached = markerIcons.get(key); if (cached != null) return cached;
-        int w = dp(38), h = dp(46); Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); Canvas c = new Canvas(bitmap);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG); p.setColor(Color.argb(80, 0, 0, 0)); c.drawCircle(w / 2f + dp(1), dp(19) + dp(2), dp(16), p);
-        p.setColor(color); c.drawCircle(w / 2f, dp(19), dp(16), p); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(2)); p.setColor(Color.WHITE); c.drawCircle(w / 2f, dp(19), dp(14), p);
-        p.setStyle(Paint.Style.FILL); p.setColor(Color.WHITE); p.setTextAlign(Paint.Align.CENTER); p.setTypeface(Typeface.DEFAULT_BOLD); p.setTextSize("•".equals(text) ? dp(24) : dp(14));
-        c.drawText(text, w / 2f, dp(24), p);
-        p.setColor(color); c.drawPath(triangle(w / 2f, dp(33), dp(7)), p);
-        Drawable d = new BitmapDrawable(getResources(), bitmap); markerIcons.put(key, d); return d;
-    }
-
-    private android.graphics.Path triangle(float x, float y, float size) {
-        android.graphics.Path path = new android.graphics.Path(); path.moveTo(x - size, y); path.lineTo(x + size, y); path.lineTo(x, y + size); path.close(); return path;
-    }
-
-    private GradientDrawable round(int fill, int radius, int stroke) {
-        GradientDrawable g = new GradientDrawable(); g.setColor(fill); g.setCornerRadius(dp(radius)); g.setStroke(dp(1), stroke); return g;
-    }
-
-    private LinearLayout.LayoutParams topMargin(int w, int h, int margin) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(w, h); lp.topMargin = dp(margin); return lp;
-    }
-
-    private void setMetricValue(TextView view, String value) { if (view != null) view.setText(value); }
-    private void setText(TextView view, String value) { if (view != null) view.setText(value); }
+    // ---------- data helpers ----------
 
     private JSONObject activeTrip() { return profileById(TRIPS, prefs.getString("activeTripId", "")); }
     private JSONObject activeVehicle() { return profileById(VEHICLES, prefs.getString("activeVehicleId", "")); }
     private JSONObject activeHotel() { return profileById(HOTELS, prefs.getString("activeHotelId", "")); }
 
     private JSONObject linkedVehicle(View root, JSONObject trip) {
-        Spinner spinner = exactSpinner(root, "CAR FOR THIS TRIP");
-        String id = selectedProfileId(VEHICLES, spinner == null ? 0 : spinner.getSelectedItemPosition());
+        Spinner s = exactSpinner(root, "CAR FOR THIS TRIP");
+        String id = selectedId(VEHICLES, s == null ? 0 : s.getSelectedItemPosition());
         if (id.isEmpty()) id = trip.optString("vehicleId", prefs.getString("activeVehicleId", ""));
         return profileById(VEHICLES, id);
     }
 
     private JSONObject linkedHotel(View root, JSONObject trip) {
-        Spinner spinner = exactSpinner(root, "HOTEL FOR THIS TRIP");
-        String id = selectedProfileId(HOTELS, spinner == null ? 0 : spinner.getSelectedItemPosition());
+        Spinner s = exactSpinner(root, "HOTEL FOR THIS TRIP");
+        String id = selectedId(HOTELS, s == null ? 0 : s.getSelectedItemPosition());
         if (id.isEmpty()) id = trip.optString("hotelId", prefs.getString("activeHotelId", ""));
         return profileById(HOTELS, id);
     }
 
-    private JSONObject linkedTripForVehicle(String vehicleId) {
-        JSONObject active = activeTrip(); if (!vehicleId.isEmpty() && vehicleId.equals(active.optString("vehicleId", ""))) return active;
-        JSONArray a = profiles(TRIPS); for (int i = 0; i < a.length(); i++) { JSONObject t = a.optJSONObject(i); if (t != null && vehicleId.equals(t.optString("vehicleId", ""))) return t; }
+    private JSONObject linkedTrip(String vehicleId) {
+        JSONObject active = activeTrip();
+        if (!vehicleId.isEmpty() && vehicleId.equals(active.optString("vehicleId", ""))) return active;
+        JSONArray trips = profiles(TRIPS);
+        for (int i = 0; i < trips.length(); i++) {
+            JSONObject t = trips.optJSONObject(i);
+            if (t != null && vehicleId.equals(t.optString("vehicleId", ""))) return t;
+        }
         return new JSONObject();
     }
 
@@ -1192,80 +853,214 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
 
     private JSONObject profileById(String key, String id) {
         if (id == null || id.isEmpty()) return new JSONObject();
-        JSONArray a = profiles(key); for (int i = 0; i < a.length(); i++) { JSONObject o = a.optJSONObject(i); if (o != null && id.equals(o.optString("id", ""))) return o; }
+        JSONArray a = profiles(key);
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject o = a.optJSONObject(i);
+            if (o != null && id.equals(o.optString("id", ""))) return o;
+        }
         return new JSONObject();
     }
 
-    private synchronized void persistProfileField(String key, String id, String field, Object value) {
+    private String selectedId(String key, int index) {
+        if (index <= 0) return "";
+        JSONObject o = profiles(key).optJSONObject(index - 1);
+        return o == null ? "" : o.optString("id", "");
+    }
+
+    private synchronized void saveField(String key, String id, String field, Object value) {
         if (id == null || id.isEmpty()) return;
         try {
-            JSONArray input = profiles(key), output = new JSONArray();
-            for (int i = 0; i < input.length(); i++) { JSONObject o = input.optJSONObject(i); if (o == null) continue; if (id.equals(o.optString("id", ""))) o.put(field, value); output.put(o); }
-            prefs.edit().putString(key, output.toString()).commit();
+            JSONArray a = profiles(key), out = new JSONArray();
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.optJSONObject(i); if (o == null) continue;
+                if (id.equals(o.optString("id", ""))) o.put(field, value);
+                out.put(o);
+            }
+            prefs.edit().putString(key, out.toString()).commit();
         } catch (Exception ignored) { }
     }
 
-    private String selectedProfileId(String key, int index) {
-        if (index <= 0) return ""; JSONArray a = profiles(key); JSONObject o = a.optJSONObject(index - 1); return o == null ? "" : o.optString("id", "");
-    }
-
     private ArrayList<GeoPoint> roundTripGeometry(JSONObject trip) {
-        ArrayList<GeoPoint> out = geometry(trip.optString("routeOut", "")); ArrayList<GeoPoint> back = geometry(trip.optString("routeBack", ""));
-        if (!out.isEmpty() && !back.isEmpty() && geoMiles(out.get(out.size() - 1), back.get(0)) < 0.01) back.remove(0); out.addAll(back); return out;
+        ArrayList<GeoPoint> route = geometry(trip.optString("routeOut", ""));
+        ArrayList<GeoPoint> back = geometry(trip.optString("routeBack", ""));
+        if (!route.isEmpty() && !back.isEmpty() && distance(route.get(route.size() - 1), back.get(0)) < .01) back.remove(0);
+        route.addAll(back);
+        return route;
     }
 
     private ArrayList<GeoPoint> geometry(String json) {
         ArrayList<GeoPoint> out = new ArrayList<>();
-        try { JSONArray a = new JSONArray(json == null || json.isEmpty() ? "[]" : json); for (int i = 0; i < a.length(); i++) { JSONArray p = a.optJSONArray(i); if (p != null && p.length() >= 2) out.add(new GeoPoint(p.optDouble(1), p.optDouble(0))); } } catch (Exception ignored) { }
+        try {
+            JSONArray a = new JSONArray(json == null || json.isEmpty() ? "[]" : json);
+            for (int i = 0; i < a.length(); i++) {
+                JSONArray p = a.optJSONArray(i);
+                if (p != null && p.length() >= 2) out.add(new GeoPoint(p.optDouble(1), p.optDouble(0)));
+            }
+        } catch (Exception ignored) { }
         return out;
     }
 
-    private GeoPoint pointAtTripMile(List<GeoPoint> route, double tripMiles, double mile) {
-        if (route == null || route.isEmpty() || tripMiles <= 0) return null; return pointAtFraction(route, mile / tripMiles);
-    }
-
-    private GeoPoint pointAtFraction(List<GeoPoint> route, double fraction) {
-        if (route == null || route.isEmpty()) return null; if (route.size() == 1) return route.get(0);
-        fraction = Math.max(0, Math.min(1, fraction)); double total = polylineMiles(route); if (total <= 0) return route.get(0); double target = total * fraction, walked = 0;
-        for (int i = 1; i < route.size(); i++) { GeoPoint a = route.get(i - 1), b = route.get(i); double seg = geoMiles(a, b); if (seg <= 0) continue; if (walked + seg >= target) { double f = (target - walked) / seg; return new GeoPoint(a.getLatitude() + (b.getLatitude() - a.getLatitude()) * f, a.getLongitude() + (b.getLongitude() - a.getLongitude()) * f); } walked += seg; }
-        return route.get(route.size() - 1);
-    }
-
-    private double nearestScaledMile(List<GeoPoint> route, double routeMiles, double lat, double lon) {
-        if (route == null || route.isEmpty() || routeMiles <= 0) return 0; GeoPoint target = new GeoPoint(lat, lon); int bestIndex = 0; double best = Double.MAX_VALUE;
-        for (int i = 0; i < route.size(); i++) { double d = geoMiles(target, route.get(i)); if (d < best) { best = d; bestIndex = i; } }
-        double before = 0; for (int i = 1; i <= bestIndex; i++) before += geoMiles(route.get(i - 1), route.get(i)); double total = polylineMiles(route); return total > 0 ? routeMiles * before / total : 0;
-    }
-
-    private double polylineMiles(List<GeoPoint> route) { double total = 0; if (route != null) for (int i = 1; i < route.size(); i++) total += geoMiles(route.get(i - 1), route.get(i)); return total; }
-    private double geoMiles(GeoPoint a, GeoPoint b) { double r = 3958.7613; double lat1 = Math.toRadians(a.getLatitude()), lat2 = Math.toRadians(b.getLatitude()); double dLat = lat2 - lat1, dLon = Math.toRadians(b.getLongitude() - a.getLongitude()); double h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2); return 2 * r * Math.asin(Math.min(1, Math.sqrt(h))); }
-
-    private List<String> discoveryFilters(String category) {
-        ArrayList<String> f = new ArrayList<>();
-        switch (category) {
-            case "Scenic": f.add("[\"tourism\"~\"viewpoint|attraction\"]"); f.add("[\"natural\"~\"peak|waterfall\"]"); f.add("[\"historic\"]"); break;
-            case "Food": f.add("[\"amenity\"~\"restaurant|fast_food|cafe\"]"); break;
-            case "Parks": f.add("[\"leisure\"~\"park|nature_reserve\"]"); f.add("[\"tourism\"~\"museum|zoo|theme_park|attraction\"]"); break;
-            case "Rest": f.add("[\"highway\"=\"rest_area\"]"); f.add("[\"amenity\"=\"toilets\"]"); break;
-            case "Supplies": f.add("[\"shop\"~\"supermarket|convenience|department_store\"]"); f.add("[\"amenity\"=\"pharmacy\"]"); break;
-            case "Towns": f.add("[\"place\"~\"city|town\"]"); break;
-            case "FuelStops": f.add("[\"amenity\"=\"fuel\"]"); break;
-            default: f.add("[\"tourism\"=\"attraction\"]");
+    private GeoPoint pointAtFraction(List<GeoPoint> points, double fraction) {
+        if (points == null || points.isEmpty()) return null;
+        if (points.size() == 1) return points.get(0);
+        fraction = Math.max(0, Math.min(1, fraction));
+        double total = 0; for (int i = 1; i < points.size(); i++) total += distance(points.get(i - 1), points.get(i));
+        if (total <= 0) return points.get(0);
+        double target = total * fraction, walked = 0;
+        for (int i = 1; i < points.size(); i++) {
+            GeoPoint a = points.get(i - 1), b = points.get(i);
+            double segment = distance(a, b);
+            if (segment <= 0) continue;
+            if (walked + segment >= target) {
+                double f = (target - walked) / segment;
+                return new GeoPoint(a.getLatitude() + (b.getLatitude() - a.getLatitude()) * f,
+                        a.getLongitude() + (b.getLongitude() - a.getLongitude()) * f);
+            }
+            walked += segment;
         }
-        return f;
+        return points.get(points.size() - 1);
     }
 
-    private String routeCategoryLabel(String category) {
-        switch (category) { case "Scenic": return "scenic"; case "Food": return "food/coffee"; case "Parks": return "parks/landmarks"; case "Rest": return "rest-area"; case "Supplies": return "supplies/pharmacy"; case "Towns": return "town"; case "FuelStops": return "fuel"; default: return "route"; }
+    private double distance(GeoPoint a, GeoPoint b) {
+        double r = 3958.7613;
+        double lat1 = Math.toRadians(a.getLatitude()), lat2 = Math.toRadians(b.getLatitude());
+        double dLat = lat2 - lat1, dLon = Math.toRadians(b.getLongitude() - a.getLongitude());
+        double h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
     }
 
-    private String placeName(JSONObject tags) {
-        if (tags == null) return ""; String name = tags.optString("name", "").trim(); if (name.isEmpty()) name = tags.optString("brand", "").trim(); if (name.isEmpty()) name = tags.optString("operator", "").trim(); if (name.isEmpty() && "rest_area".equals(tags.optString("highway", ""))) name = "Rest area"; if (name.isEmpty() && "fuel".equals(tags.optString("amenity", ""))) name = "Fuel station"; return name;
+    // ---------- view helpers ----------
+
+    private void hideIntro(LinearLayout card, TextView header) {
+        header.setVisibility(View.GONE);
+        int start = card.indexOfChild(header) + 1;
+        if (start >= 0 && start < card.getChildCount() && card.getChildAt(start) instanceof TextView) card.getChildAt(start).setVisibility(View.GONE);
     }
 
-    private String http(String u) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection(); c.setConnectTimeout(12000); c.setReadTimeout(25000); c.setRequestProperty("User-Agent", "TrailboundAndroid/7.0"); c.setRequestProperty("Accept", "application/json,text/html,*/*");
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()))) { StringBuilder s = new StringBuilder(); String line; while ((line = br.readLine()) != null) s.append(line); return s.toString(); } finally { c.disconnect(); }
+    private LinearLayout dashboard(String tag, String eyebrow) {
+        LinearLayout p = new LinearLayout(this);
+        p.setTag(tag); p.setOrientation(LinearLayout.VERTICAL); p.setPadding(dp(14), dp(14), dp(14), dp(14));
+        p.setBackground(round(SURFACE, 18, Color.rgb(103, 125, 80)));
+        TextView e = small(eyebrow); e.setTextColor(Color.rgb(187, 212, 146)); e.setTypeface(Typeface.DEFAULT, Typeface.BOLD); p.addView(e);
+        return p;
+    }
+
+    private LinearLayout metric(String tag, String label) {
+        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(10), dp(9), dp(10), dp(9));
+        box.setBackground(round(DEEP, 14, Color.rgb(72, 88, 59)));
+        TextView l = small(label); l.setTextSize(10); box.addView(l);
+        TextView v = bigText("—"); v.setTextSize(18); v.setTag(tag + "_value"); box.addView(v, topMargin(-1, -2, 1));
+        box.setTag(tag); return box;
+    }
+
+    private LinearLayout metricRow(View left, View right) {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(left, weight()); row.addView(right, weight()); return row;
+    }
+
+    private LinearLayout.LayoutParams weight() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1); p.setMargins(dp(3), 0, dp(3), 0); return p;
+    }
+
+    private Button compactButton(String text) {
+        Button b = new Button(this); b.setText(text); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(13); b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        b.setBackground(round(Color.rgb(42, 52, 35), 14, BORDER)); return b;
+    }
+
+    private TextView bigText(String text) { TextView t = new TextView(this); t.setText(text); t.setTextColor(Color.WHITE); t.setTextSize(22); t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); return t; }
+    private TextView body(String text) { TextView t = new TextView(this); t.setText(text); t.setTextColor(CREAM); t.setTextSize(13); return t; }
+    private TextView small(String text) { TextView t = new TextView(this); t.setText(text); t.setTextColor(MUTED); t.setTextSize(11); return t; }
+
+    private void sectionBefore(View root, LinearLayout card, String label, String tag, String title) {
+        if (card.findViewWithTag(tag) != null) return;
+        TextView anchor = findExactText(root, label); if (anchor == null || anchor.getParent() != card) return;
+        TextView section = small(title); section.setTag(tag); section.setTextColor(Color.rgb(187, 212, 146)); section.setTypeface(Typeface.DEFAULT, Typeface.BOLD); section.setTextSize(12);
+        card.addView(section, Math.max(0, card.indexOfChild(anchor)), topMargin(-1, -2, 15));
+    }
+
+    private Drawable markerIcon(int color, String text) {
+        String key = color + "|" + text;
+        Drawable existing = markerIcons.get(key); if (existing != null) return existing;
+        int w = dp(38), h = dp(45);
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bitmap);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(color); c.drawCircle(w / 2f, dp(18), dp(16), p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(2)); p.setColor(Color.WHITE); c.drawCircle(w / 2f, dp(18), dp(14), p);
+        p.setStyle(Paint.Style.FILL); p.setColor(Color.WHITE); p.setTextAlign(Paint.Align.CENTER); p.setTypeface(Typeface.DEFAULT_BOLD); p.setTextSize(dp(13)); c.drawText(text, w / 2f, dp(23), p);
+        android.graphics.Path path = new android.graphics.Path(); path.moveTo(w / 2f - dp(6), dp(31)); path.lineTo(w / 2f + dp(6), dp(31)); path.lineTo(w / 2f, dp(42)); path.close(); p.setColor(color); c.drawPath(path, p);
+        Drawable d = new BitmapDrawable(getResources(), bitmap); markerIcons.put(key, d); return d;
+    }
+
+    private GradientDrawable round(int fill, int radius, int stroke) {
+        GradientDrawable g = new GradientDrawable(); g.setColor(fill); g.setCornerRadius(dp(radius)); g.setStroke(dp(1), stroke); return g;
+    }
+
+    private LinearLayout.LayoutParams topMargin(int w, int h, int margin) { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(w, h); p.topMargin = dp(margin); return p; }
+    private void setText(TextView view, String value) { if (view != null) view.setText(value); }
+    private void setMetric(TextView view, String value) { if (view != null) view.setText(value); }
+
+    private EditText exactField(View root, String label) {
+        TextView l = findExactText(root, label); if (l == null || !(l.getParent() instanceof ViewGroup)) return null;
+        ViewGroup parent = (ViewGroup) l.getParent(); int start = parent.indexOfChild(l) + 1;
+        for (int i = start; i < parent.getChildCount(); i++) { View child = parent.getChildAt(i); if (child instanceof EditText) return (EditText) child; if (child instanceof TextView && !(child instanceof EditText)) break; }
+        return null;
+    }
+
+    private Spinner exactSpinner(View root, String label) {
+        TextView l = findExactText(root, label); if (l == null || !(l.getParent() instanceof ViewGroup)) return null;
+        ViewGroup parent = (ViewGroup) l.getParent(); int start = parent.indexOfChild(l) + 1;
+        for (int i = start; i < parent.getChildCount(); i++) { View child = parent.getChildAt(i); if (child instanceof Spinner) return (Spinner) child; if (child instanceof TextView) break; }
+        return null;
+    }
+
+    private TextView findExactText(View root, String target) { ArrayList<TextView> all = new ArrayList<>(); collect(root, TextView.class, all); for (TextView t : all) if (t.getText() != null && target.equalsIgnoreCase(t.getText().toString().trim())) return t; return null; }
+    private TextView findTaggedText(View root, String tag) { ArrayList<TextView> all = new ArrayList<>(); collect(root, TextView.class, all); for (TextView t : all) if (tag.equals(t.getTag())) return t; return null; }
+    private LinearLayout findTaggedLinear(View root, String tag) { ArrayList<LinearLayout> all = new ArrayList<>(); collect(root, LinearLayout.class, all); for (LinearLayout l : all) if (tag.equals(l.getTag())) return l; return null; }
+    private EditText findTaggedEditText(View root, String tag) { ArrayList<EditText> all = new ArrayList<>(); collect(root, EditText.class, all); for (EditText e : all) if (tag.equals(e.getTag())) return e; return null; }
+    private ImageView findTaggedImage(View root, String tag) { ArrayList<ImageView> all = new ArrayList<>(); collect(root, ImageView.class, all); for (ImageView i : all) if (tag.equals(i.getTag())) return i; return null; }
+    private Button findButton(View root, String text) { ArrayList<Button> all = new ArrayList<>(); collect(root, Button.class, all); for (Button b : all) if (b.getText() != null && text.equalsIgnoreCase(b.getText().toString().trim())) return b; return null; }
+    private Button findTaggedButton(View root, String tag) { ArrayList<Button> all = new ArrayList<>(); collect(root, Button.class, all); for (Button b : all) if (tag.equals(b.getTag())) return b; return null; }
+    private Button firstButton(View root, String... labels) { for (String s : labels) { Button b = findButton(root, s); if (b != null) return b; } return null; }
+    private CheckBox findCheckBoxContaining(View root, String target) { ArrayList<CheckBox> all = new ArrayList<>(); collect(root, CheckBox.class, all); for (CheckBox b : all) if (b.getText() != null && b.getText().toString().contains(target)) return b; return null; }
+    private MapView firstMap(View root) { ArrayList<MapView> all = new ArrayList<>(); collect(root, MapView.class, all); return all.isEmpty() ? null : all.get(0); }
+    private ImageView firstImage(View root) { ArrayList<ImageView> all = new ArrayList<>(); collect(root, ImageView.class, all); return all.isEmpty() ? null : all.get(0); }
+    private <T extends View> void collect(View root, Class<T> type, List<T> out) { if (type.isInstance(root)) out.add(type.cast(root)); if (root instanceof ViewGroup) { ViewGroup g = (ViewGroup) root; for (int i = 0; i < g.getChildCount(); i++) collect(g.getChildAt(i), type, out); } }
+    private int childIndexByTag(ViewGroup group, String tag) { for (int i = 0; i < group.getChildCount(); i++) if (tag.equals(group.getChildAt(i).getTag())) return i; return 0; }
+
+    // ---------- misc helpers ----------
+
+    private String text(EditText e) { return e == null || e.getText() == null ? "" : e.getText().toString(); }
+    private String text(EditText e, String fallback) { String s = text(e).trim(); return s.isEmpty() ? fallback : s; }
+    private double positive(String s) { try { return TrailboundTripMath.nonNegative(Double.parseDouble(s == null ? "" : s.trim())); } catch (Exception e) { return 0; } }
+    private double signed(String s) { try { return Double.parseDouble(s == null ? "" : s.trim()); } catch (Exception e) { return 0; } }
+    private String one(double d) { return String.format(Locale.US, "%.1f", d); }
+    private String money(double d) { return NumberFormat.getCurrencyInstance(Locale.US).format(d); }
+    private String shortPlace(String s) { if (s == null || s.trim().isEmpty()) return "Set location"; String t = s.trim(); int comma = t.indexOf(','); String out = comma > 0 ? t.substring(0, comma).trim() : t; return shorten(out, 28); }
+    private String shorten(String s, int max) { if (s == null) return ""; return s.length() > max ? s.substring(0, max) + "…" : s; }
+    private String join(List<String> items) { StringBuilder b = new StringBuilder(); for (String s : items) { if (b.length() > 0) b.append(" • "); b.append(s); } return b.toString(); }
+    private String normalize(String s) { return s == null ? "" : s.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", ""); }
+    private String hotelImageFile(String id) { return "hotel_" + (id == null ? "draft" : id.replaceAll("[^A-Za-z0-9_-]", "")) + ".jpg"; }
+    private String areaQuery(String address) { if (address == null || address.trim().isEmpty()) return "travel destination"; String[] p = address.split(","); if (p.length >= 2) return p[p.length - 2].trim() + " " + p[p.length - 1].trim(); return address; }
+    private String enc(String s) throws Exception { return URLEncoder.encode(s == null ? "" : s, "UTF-8"); }
+    private String metaValue(JSONObject meta, String key) { JSONObject o = meta == null ? null : meta.optJSONObject(key); return o == null ? "" : o.optString("value", ""); }
+    private String stripHtml(String s) { return s == null ? "" : s.replaceAll("<[^>]+>", "").replace("&amp;", "&").trim(); }
+    private String firstValue(JSONObject o, String... keys) { if (o == null) return ""; for (String k : keys) { String v = o.optString(k, "").trim(); if (!v.isEmpty()) return v; } return ""; }
+    private double firstArray(JSONObject o, String key) { JSONArray a = o == null ? null : o.optJSONArray(key); return a == null || a.length() == 0 ? Double.NaN : a.optDouble(0, Double.NaN); }
+    private int dp(int n) { return (int)(n * getResources().getDisplayMetrics().density + .5f); }
+    private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
+
+    private String weather(int code) {
+        if (code == 0) return "clear"; if (code == 1 || code == 2) return "partly cloudy"; if (code == 3) return "overcast";
+        if (code == 45 || code == 48) return "fog"; if (code >= 51 && code <= 57) return "drizzle"; if (code >= 61 && code <= 67) return "rain";
+        if (code >= 71 && code <= 77) return "snow"; if (code >= 80 && code <= 82) return "showers"; if (code >= 95) return "thunderstorms"; return "";
+    }
+
+    private String http(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(12000); c.setReadTimeout(24000); c.setRequestProperty("User-Agent", "TrailboundAndroid/7.0"); c.setRequestProperty("Accept", "application/json,text/html,*/*");
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()))) { StringBuilder s = new StringBuilder(); String line; while ((line = br.readLine()) != null) s.append(line); return s.toString(); }
+        finally { c.disconnect(); }
     }
 
     private Bitmap downloadBitmap(String url) throws Exception {
@@ -1273,72 +1068,15 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         try (InputStream in = c.getInputStream()) { return BitmapFactory.decodeStream(in); } finally { c.disconnect(); }
     }
 
-    private String metaValue(JSONObject meta, String key) { JSONObject o = meta == null ? null : meta.optJSONObject(key); return o == null ? "" : o.optString("value", ""); }
-    private String stripHtml(String s) { return s == null ? "" : s.replaceAll("<[^>]+>", "").replace("&amp;", "&").trim(); }
-    private String cleanCredit(String s) { String clean = stripHtml(s); return clean.length() > 45 ? clean.substring(0, 45) + "…" : clean; }
-    private String hotelImageFile(String id) { return "hotel_" + (id == null ? "draft" : id.replaceAll("[^A-Za-z0-9_-]", "")) + ".jpg"; }
-    private String areaQueryFromAddress(String address) { if (address == null) return "travel destination"; String[] parts = address.split(","); if (parts.length >= 2) return parts[parts.length - 2].trim() + " " + parts[parts.length - 1].trim(); return address; }
-    private String firstNonEmpty(JSONObject a, String... keys) { if (a == null) return ""; for (String k : keys) { String v = a.optString(k, "").trim(); if (!v.isEmpty()) return v; } return ""; }
-    private double arrayDouble(JSONObject parent, String key) { if (parent == null) return Double.NaN; JSONArray a = parent.optJSONArray(key); return a == null || a.length() == 0 ? Double.NaN : a.optDouble(0, Double.NaN); }
-
-    private String weatherLabel(int code) {
-        if (code == 0) return "clear"; if (code == 1 || code == 2) return "partly cloudy"; if (code == 3) return "overcast";
-        if (code == 45 || code == 48) return "fog"; if (code >= 51 && code <= 57) return "drizzle"; if (code >= 61 && code <= 67) return "rain";
-        if (code >= 71 && code <= 77) return "snow"; if (code >= 80 && code <= 82) return "showers"; if (code >= 95) return "thunderstorms"; return "";
-    }
-
-    private EditText exactField(View root, String label) {
-        TextView l = findExactText(root, label); if (l == null || !(l.getParent() instanceof ViewGroup)) return null; ViewGroup p = (ViewGroup) l.getParent(); int start = p.indexOfChild(l) + 1;
-        for (int i = start; i < p.getChildCount(); i++) { View child = p.getChildAt(i); if (child instanceof EditText) return (EditText) child; if (child instanceof TextView && !(child instanceof EditText)) break; } return null;
-    }
-
-    private Spinner exactSpinner(View root, String label) {
-        TextView l = findExactText(root, label); if (l == null || !(l.getParent() instanceof ViewGroup)) return null; ViewGroup p = (ViewGroup) l.getParent(); int start = p.indexOfChild(l) + 1;
-        for (int i = start; i < p.getChildCount(); i++) { View child = p.getChildAt(i); if (child instanceof Spinner) return (Spinner) child; if (child instanceof TextView) break; } return null;
-    }
-
-    private TextView findExactText(View root, String target) { ArrayList<TextView> all = new ArrayList<>(); collect(root, TextView.class, all); for (TextView t : all) if (t.getText() != null && target.equalsIgnoreCase(t.getText().toString().trim())) return t; return null; }
-    private TextView findTaggedText(View root, String tag) { ArrayList<TextView> all = new ArrayList<>(); collect(root, TextView.class, all); for (TextView t : all) if (tag.equals(t.getTag())) return t; return null; }
-    private Button findButton(View root, String target) { ArrayList<Button> all = new ArrayList<>(); collect(root, Button.class, all); for (Button b : all) if (b.getText() != null && target.equalsIgnoreCase(b.getText().toString().trim())) return b; return null; }
-    private Button findTaggedButton(View root, String tag) { ArrayList<Button> all = new ArrayList<>(); collect(root, Button.class, all); for (Button b : all) if (tag.equals(b.getTag())) return b; return null; }
-    private EditText findTaggedEditText(View root, String tag) { ArrayList<EditText> all = new ArrayList<>(); collect(root, EditText.class, all); for (EditText e : all) if (tag.equals(e.getTag())) return e; return null; }
-    private LinearLayout findTaggedLinear(View root, String tag) { ArrayList<LinearLayout> all = new ArrayList<>(); collect(root, LinearLayout.class, all); for (LinearLayout l : all) if (tag.equals(l.getTag())) return l; return null; }
-    private ImageView findTaggedImage(View root, String tag) { ArrayList<ImageView> all = new ArrayList<>(); collect(root, ImageView.class, all); for (ImageView i : all) if (tag.equals(i.getTag())) return i; return null; }
-    private CheckBox findCheckBoxContaining(View root, String target) { ArrayList<CheckBox> all = new ArrayList<>(); collect(root, CheckBox.class, all); for (CheckBox b : all) if (b.getText() != null && b.getText().toString().contains(target)) return b; return null; }
-    private MapView firstMap(View root) { ArrayList<MapView> all = new ArrayList<>(); collect(root, MapView.class, all); return all.isEmpty() ? null : all.get(0); }
-    private ImageView firstImage(View root) { ArrayList<ImageView> all = new ArrayList<>(); collect(root, ImageView.class, all); return all.isEmpty() ? null : all.get(0); }
-    private <T extends View> void collect(View root, Class<T> type, List<T> out) { if (type.isInstance(root)) out.add(type.cast(root)); if (root instanceof ViewGroup) { ViewGroup g = (ViewGroup) root; for (int i = 0; i < g.getChildCount(); i++) collect(g.getChildAt(i), type, out); } }
-
-    private int indexOfTag(ViewGroup group, String tag) { for (int i = 0; i < group.getChildCount(); i++) if (tag.equals(group.getChildAt(i).getTag())) return i; return -1; }
-    private String text(EditText e) { return e == null || e.getText() == null ? "" : e.getText().toString(); }
-    private String text(EditText e, String fallback) { String s = text(e).trim(); return s.isEmpty() ? fallback : s; }
-    private double positive(String s) { try { return TrailboundTripMath.nonNegative(Double.parseDouble(s == null ? "" : s.trim())); } catch (Exception e) { return 0; } }
-    private double signed(String s) { try { return Double.parseDouble(s == null ? "" : s.trim()); } catch (Exception e) { return 0; } }
-    private String shortPlace(String s) { if (s == null || s.trim().isEmpty()) return "Set location"; String t = s.trim(); int comma = t.indexOf(','); String shortName = comma > 0 ? t.substring(0, comma).trim() : t; return shortName.length() > 28 ? shortName.substring(0, 28) + "…" : shortName; }
-    private String joinStrings(List<String> s) { StringBuilder b = new StringBuilder(); for (String v : s) { if (b.length() > 0) b.append(" • "); b.append(v); } return b.toString(); }
-    private String one(double d) { return String.format(Locale.US, "%.1f", d); }
-    private String money(double d) { return NumberFormat.getCurrencyInstance(Locale.US).format(d); }
-    private String enc(String s) throws Exception { return URLEncoder.encode(s == null ? "" : s, "UTF-8"); }
-    private int dp(int n) { return (int)(n * getResources().getDisplayMetrics().density + .5f); }
-    private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
-
     @Override protected void onDestroy() {
         io.shutdownNow();
         super.onDestroy();
     }
 
-    private static class RouteAnchor {
-        final double lat, lon;
-        RouteAnchor(double lat, double lon) { this.lat = lat; this.lon = lon; }
-    }
-
-    private static class RoutePlace {
-        final String name, leg; final double lat, lon, mile;
-        RoutePlace(String name, double lat, double lon, double mile, String leg) { this.name = name; this.lat = lat; this.lon = lon; this.mile = mile; this.leg = leg; }
-    }
-
     private static class PhotoResult {
-        final String url, credit, license, source;
-        PhotoResult(String url, String credit, String license, String source) { this.url = url; this.credit = credit; this.license = license; this.source = source; }
+        final String url, credit, license, source; final boolean hotelMatch;
+        PhotoResult(String url, String credit, String license, String source, boolean hotelMatch) {
+            this.url = url; this.credit = credit; this.license = license; this.source = source; this.hotelMatch = hotelMatch;
+        }
     }
 }
