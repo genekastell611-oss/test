@@ -10,9 +10,11 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -62,10 +64,21 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("trailbound", MODE_PRIVATE);
 
+        FrameLayout root = new FrameLayout(this);
+        ImageView highwayBackground = new ImageView(this);
+        highwayBackground.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        highwayBackground.setBackgroundColor(Color.rgb(32, 30, 24));
+        root.addView(highwayBackground, new FrameLayout.LayoutParams(-1, -1));
+        View shade = new View(this);
+        shade.setBackgroundColor(Color.argb(165, 10, 12, 8));
+        root.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(dp(12), dp(18), dp(12), dp(10));
-        shell.setBackgroundColor(Color.rgb(20, 22, 17));
+        shell.setBackgroundColor(Color.TRANSPARENT);
+        root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+        loadHighwayBackground(highwayBackground);
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
@@ -111,7 +124,7 @@ public class MainActivity extends Activity {
         hotelTab.setOnClickListener(v->showHotel());
         infoTab.setOnClickListener(v->showInfo());
 
-        setContentView(shell);
+        setContentView(root);
         showTrip();
     }
 
@@ -353,6 +366,22 @@ public class MainActivity extends Activity {
                 prefs.edit().putString("mpg",found).apply();
                 runOnUiThread(()->{mpg.setText(found);refreshVehicleSummary();toast("EPA MPG loaded");});
             }catch(Exception ex){runOnUiThread(()->toast("MPG lookup failed: "+ex.getMessage()));}
+        });
+    }
+
+    private void loadHighwayBackground(ImageView target){
+        executor.execute(()->{
+            HttpURLConnection c=null;
+            try{
+                URL u=new URL("https://upload.wikimedia.org/wikipedia/commons/e/e4/Route_66_through_the_Mojave_in_California.JPG");
+                c=(HttpURLConnection)u.openConnection();
+                c.setConnectTimeout(12000); c.setReadTimeout(18000);
+                c.setRequestProperty("User-Agent","TrailboundAndroid/3.1");
+                try(InputStream in=c.getInputStream()){
+                    Bitmap bmp=BitmapFactory.decodeStream(in);
+                    runOnUiThread(()->target.setImageBitmap(bmp));
+                }
+            }catch(Exception ignored){} finally { if(c!=null)c.disconnect(); }
         });
     }
 
