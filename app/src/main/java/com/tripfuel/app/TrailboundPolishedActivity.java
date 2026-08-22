@@ -132,10 +132,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // App shell / controls
-    // ---------------------------------------------------------------------
-
     private void polishHeader(View root) {
         TextView title = findTaggedText(root, "polish_app_title");
         if (title == null) {
@@ -255,10 +251,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
             b.setBackground(round(fill, 14, stroke));
         }
     }
-
-    // ---------------------------------------------------------------------
-    // Trip: route-first dashboard and fully differentiated map
-    // ---------------------------------------------------------------------
 
     private void polishTrip(View root) {
         TextView header = findExactText(root, "Trip profile");
@@ -515,10 +507,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         card.addView(b, topMargin(-1, dp(48), 10));
     }
 
-    // ---------------------------------------------------------------------
-    // Complete round-trip discovery: outbound + return for every category
-    // ---------------------------------------------------------------------
-
     private void attachRoundTripDiscovery(View root) {
         String[][] pairs = new String[][]{
                 {"Scenic & viewpoints", "Scenic"}, {"Food & coffee", "Food"}, {"Parks & landmarks", "Parks"},
@@ -671,10 +659,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         toast(places.length() == 0 ? "No named results found in this round-trip corridor." : "Found " + places.length() + " round-trip stops.");
     }
 
-    // ---------------------------------------------------------------------
-    // Garage: maintenance/reporting hub
-    // ---------------------------------------------------------------------
-
     private void polishVehicle(View root) {
         TextView header = findExactText(root, "Vehicle profile");
         if (header == null || !(header.getParent() instanceof LinearLayout)) return;
@@ -813,10 +797,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         toast("Service recorded • next due at " + next + " mi");
         main.postDelayed(this::patchPolish, 200);
     }
-
-    // ---------------------------------------------------------------------
-    // Stay: hotel photo, local briefing, map, nearby hub
-    // ---------------------------------------------------------------------
 
     private void polishHotel(View root) {
         TextView header = findExactText(root, "Hotel profile");
@@ -1077,10 +1057,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
         });
     }
 
-    // ---------------------------------------------------------------------
-    // Explore screen snapshot
-    // ---------------------------------------------------------------------
-
     private void polishArea(View root) {
         TextView header = findExactText(root, "Linked adventure");
         if (header == null || !(header.getParent() instanceof LinearLayout)) return;
@@ -1109,10 +1085,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
                 "\nVehicle: " + vehicle.optString("label", "No vehicle linked") + "\nStay: " + hotel.optString("label", "No hotel linked") +
                 "\nSaved discoveries: " + routePlaces + " route • " + hotelPlaces + " near hotel");
     }
-
-    // ---------------------------------------------------------------------
-    // UI helpers
-    // ---------------------------------------------------------------------
 
     private LinearLayout panel(String tag, int fill, int stroke) {
         LinearLayout p = new LinearLayout(this);
@@ -1184,10 +1156,6 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
 
     private void setMetricValue(TextView view, String value) { if (view != null) view.setText(value); }
     private void setText(TextView view, String value) { if (view != null) view.setText(value); }
-
-    // ---------------------------------------------------------------------
-    // Data / network helpers
-    // ---------------------------------------------------------------------
 
     private JSONObject activeTrip() { return profileById(TRIPS, prefs.getString("activeTripId", "")); }
     private JSONObject activeVehicle() { return profileById(VEHICLES, prefs.getString("activeVehicleId", "")); }
@@ -1338,7 +1306,7 @@ public class TrailboundPolishedActivity extends TrailboundIntegrityActivity {
     private ImageView findTaggedImage(View root, String tag) { ArrayList<ImageView> all = new ArrayList<>(); collect(root, ImageView.class, all); for (ImageView i : all) if (tag.equals(i.getTag())) return i; return null; }
     private CheckBox findCheckBoxContaining(View root, String target) { ArrayList<CheckBox> all = new ArrayList<>(); collect(root, CheckBox.class, all); for (CheckBox b : all) if (b.getText() != null && b.getText().toString().contains(target)) return b; return null; }
     private MapView firstMap(View root) { ArrayList<MapView> all = new ArrayList<>(); collect(root, MapView.class, all); return all.isEmpty() ? null : all.get(0); }
-    private ImageView firstImage(View root) { ArrayList<ImageView> all = new ArrayList<>(); collect(root, ImageView.class, all); for (ImageView i : all) if (!(i instanceof MapView)) return i; return null; }
+    private ImageView firstImage(View root) { ArrayList<ImageView> all = new ArrayList<>(); collect(root, ImageView.class, all); return all.isEmpty() ? null : all.get(0); }
     private <T extends View> void collect(View root, Class<T> type, List<T> out) { if (type.isInstance(root)) out.add(type.cast(root)); if (root instanceof ViewGroup) { ViewGroup g = (ViewGroup) root; for (int i = 0; i < g.getChildCount(); i++) collect(g.getChildAt(i), type, out); } }
 
     private int indexOfTag(ViewGroup group, String tag) { for (int i = 0; i < group.getChildCount(); i++) if (tag.equals(group.getChildAt(i).getTag())) return i; return -1; }
