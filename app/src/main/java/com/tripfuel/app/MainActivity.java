@@ -41,8 +41,8 @@ import javax.xml.parsers.DocumentBuilderFactory;
 public class MainActivity extends Activity {
     private final int GREEN = Color.rgb(76, 99, 54);
     private final int BROWN = Color.rgb(95, 72, 45);
-    private final int CREAM = Color.rgb(244, 235, 214);
-    private final int CARD = Color.argb(238, 39, 38, 31);
+    private final int CREAM = Color.rgb(255, 250, 238);
+    private final int CARD = Color.argb(250, 20, 21, 17);
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private SharedPreferences prefs;
     private LinearLayout content;
@@ -61,10 +61,10 @@ public class MainActivity extends Activity {
         shell.setPadding(dp(12), dp(18), dp(12), dp(12));
         root.addView(shell, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        TextView badge = text("ROUTE 66", 15, true); badge.setTextColor(Color.rgb(117,54,38)); badge.setGravity(Gravity.CENTER); badge.setBackground(round(Color.rgb(239,228,199), 16, Color.rgb(117,54,38), 3));
+        TextView badge = text("ROUTE 66", 15, true); badge.setTextColor(Color.rgb(105,40,28)); badge.setGravity(Gravity.CENTER); badge.setBackground(round(Color.rgb(255,244,214), 16, Color.rgb(105,40,28), 3));
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(110), dp(48)); bp.bottomMargin=dp(8); shell.addView(badge,bp);
-        TextView title=text("TRAILBOUND",30,true); shell.addView(title);
-        TextView sub=text("Adventure awaits. We’ll do the math.",14,false); sub.setTextColor(Color.rgb(225,216,197)); shell.addView(sub);
+        TextView title=text("TRAILBOUND",30,true); title.setTextColor(Color.WHITE); shell.addView(title);
+        TextView sub=text("Adventure awaits. We’ll do the math.",14,true); sub.setTextColor(Color.rgb(255,248,233)); shell.addView(sub);
 
         LinearLayout tabs = new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL); tabs.setPadding(0,dp(12),0,dp(8));
         tripTab=tab("TRIP"); vehicleTab=tab("VEHICLE"); hotelTab=tab("HOTEL"); infoTab=tab("AREA INFO");
@@ -124,17 +124,17 @@ public class MainActivity extends Activity {
     private void saveVehicle(){ if(year!=null)prefs.edit().putString("year",year.getText().toString()).putString("make",make.getText().toString()).putString("model",model.getText().toString()).putString("mpg",mpg.getText().toString()).apply(); }
     private void saveHotel(){ if(hotelName!=null)prefs.edit().putString("hotelName",hotelName.getText().toString()).putString("hotelAddress",hotelAddress.getText().toString()).putString("hotelCost",hotelCost.getText().toString()).apply(); }
 
-    private void select(Button b){ if(tripTab==null)return; for(Button x:new Button[]{tripTab,vehicleTab,hotelTab,infoTab})x.setBackground(round(x==b?GREEN:Color.argb(235,48,45,35),14,Color.argb(120,220,210,180),1)); }
-    private Button tab(String s){Button b=new Button(this);b.setText(s);b.setTextColor(CREAM);b.setTextSize(11);b.setAllCaps(false);b.setGravity(Gravity.CENTER);return b;}
+    private void select(Button b){ if(tripTab==null)return; for(Button x:new Button[]{tripTab,vehicleTab,hotelTab,infoTab})x.setBackground(round(x==b?GREEN:Color.argb(248,24,25,20),14,Color.rgb(190,202,154),1)); }
+    private Button tab(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);b.setTextSize(12);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setAllCaps(false);b.setGravity(Gravity.CENTER);return b;}
     private LinearLayout.LayoutParams weight(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(50),1);p.setMargins(dp(3),0,dp(3),0);return p;}
-    private LinearLayout card(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(16),dp(16),dp(16),dp(16));c.setBackground(round(CARD,18,Color.rgb(86,88,67),1));return c;}
-    private TextView section(String s){TextView t=text(s,20,true);t.setTextColor(Color.rgb(217,229,194));t.setPadding(0,0,0,dp(8));return t;}
-    private EditText input(String hint,String value,boolean number){EditText e=new EditText(this);e.setText(value);e.setHint(hint);e.setTextColor(Color.WHITE);e.setHintTextColor(Color.rgb(156,151,136));e.setTextSize(16);e.setSingleLine(true);e.setPadding(dp(12),0,dp(12),0);e.setBackground(round(Color.rgb(28,30,24),14,Color.rgb(89,92,72),1)); if(number)e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);return e;}
-    private void addField(LinearLayout c,String label,EditText e){TextView l=text(label,12,true);l.setTextColor(Color.rgb(211,201,182));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(10);c.addView(l,lp);LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(-1,dp(52));ep.topMargin=dp(5);c.addView(e,ep);}
-    private Button primary(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);b.setBackground(round(GREEN,14,Color.rgb(145,163,106),1));return b;}
-    private Button secondary(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);b.setBackground(round(BROWN,14,Color.rgb(139,111,78),1));return b;}
+    private LinearLayout card(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(16),dp(16),dp(16),dp(16));c.setBackground(round(CARD,18,Color.rgb(119,124,92),1));return c;}
+    private TextView section(String s){TextView t=text(s,20,true);t.setTextColor(Color.rgb(239,255,209));t.setPadding(0,0,0,dp(8));return t;}
+    private EditText input(String hint,String value,boolean number){EditText e=new EditText(this);e.setText(value);e.setHint(hint);e.setTextColor(Color.WHITE);e.setHintTextColor(Color.rgb(208,204,191));e.setTextSize(16);e.setTypeface(Typeface.DEFAULT,Typeface.BOLD);e.setSingleLine(true);e.setPadding(dp(12),0,dp(12),0);e.setBackground(round(Color.rgb(12,14,10),14,Color.rgb(139,145,108),1)); if(number)e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);return e;}
+    private void addField(LinearLayout c,String label,EditText e){TextView l=text(label,13,true);l.setTextColor(Color.rgb(255,246,229));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(10);c.addView(l,lp);LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(-1,dp(52));ep.topMargin=dp(5);c.addView(e,ep);}
+    private Button primary(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setBackground(round(Color.rgb(92,119,65),14,Color.rgb(196,218,154),1));return b;}
+    private Button secondary(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setBackground(round(Color.rgb(113,87,55),14,Color.rgb(205,173,126),1));return b;}
     private LinearLayout.LayoutParams buttonLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(52));p.topMargin=dp(12);return p;}
-    private TextView infoBox(String s){TextView t=text(s,15,false);t.setTextColor(CREAM);t.setLineSpacing(0,1.16f);t.setPadding(dp(14),dp(14),dp(14),dp(14));t.setBackground(round(Color.rgb(29,31,24),14,Color.rgb(76,80,61),1));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(12);t.setLayoutParams(p);return t;}
+    private TextView infoBox(String s){TextView t=text(s,15,false);t.setTextColor(Color.WHITE);t.setLineSpacing(0,1.18f);t.setPadding(dp(14),dp(14),dp(14),dp(14));t.setBackground(round(Color.rgb(10,12,9),14,Color.rgb(111,117,86),1));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(12);t.setLayoutParams(p);return t;}
     private TextView text(String s,int sp,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextColor(CREAM);t.setTextSize(sp);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
     private GradientDrawable round(int fill,int radius,int stroke,int sw){GradientDrawable g=new GradientDrawable();g.setColor(fill);g.setCornerRadius(dp(radius));g.setStroke(dp(sw),stroke);return g;}
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
@@ -147,6 +147,6 @@ public class MainActivity extends Activity {
     public static class HighwayLayout extends FrameLayout {
         private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
         public HighwayLayout(Context c){super(c);setWillNotDraw(false);}
-        @Override protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight();p.setColor(Color.rgb(86,96,60));c.drawRect(0,0,w,h*.30f,p);p.setColor(Color.rgb(150,113,69));c.drawRect(0,h*.30f,w,h,p);p.setColor(Color.rgb(66,65,56));Path road=new Path();road.moveTo(w*.43f,h*.20f);road.lineTo(w*.57f,h*.20f);road.lineTo(w*.94f,h);road.lineTo(w*.06f,h);road.close();c.drawPath(road,p);p.setStrokeWidth(Math.max(3,w*.009f));p.setColor(Color.rgb(239,207,130));for(float y=h*.28f;y<h;y+=h*.11f)c.drawLine(w/2,y,w/2,y+h*.055f,p);p.setColor(Color.argb(90,20,22,16));c.drawRect(0,0,w,h,p);}
+        @Override protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight();p.setColor(Color.rgb(86,96,60));c.drawRect(0,0,w,h*.30f,p);p.setColor(Color.rgb(150,113,69));c.drawRect(0,h*.30f,w,h,p);p.setColor(Color.rgb(66,65,56));Path road=new Path();road.moveTo(w*.43f,h*.20f);road.lineTo(w*.57f,h*.20f);road.lineTo(w*.94f,h);road.lineTo(w*.06f,h);road.close();c.drawPath(road,p);p.setStrokeWidth(Math.max(3,w*.009f));p.setColor(Color.rgb(239,207,130));for(float y=h*.28f;y<h;y+=h*.11f)c.drawLine(w/2,y,w/2,y+h*.055f,p);p.setColor(Color.argb(125,12,14,10));c.drawRect(0,0,w,h,p);}
     }
 }
