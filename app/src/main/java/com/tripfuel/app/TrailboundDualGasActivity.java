@@ -22,15 +22,19 @@ import org.json.JSONObject;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.WeakHashMap;
 
-/** Trailbound 5.8 - separate automatic-average and conservative fuel budget scenarios. */
+/** Trailbound dual fuel-budget scenarios: route average vs user conservative price. */
 public class TrailboundDualGasActivity extends TrailboundCleanFixActivity {
     private static final String PREFS = "trailbound_v5";
     private SharedPreferences prefs;
     private boolean patching;
     private boolean restoring;
+    private final Set<EditText> dualWatchedFields = Collections.newSetFromMap(new WeakHashMap<EditText, Boolean>());
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -181,6 +185,8 @@ public class TrailboundDualGasActivity extends TrailboundCleanFixActivity {
             s.append("Round trip: ").append(one(roundMiles)).append(" mi • ").append(one(gallons)).append(" gal needed\n\n");
             s.append("AUTOMATIC / ROUTE AVERAGE\n");
             s.append(money(averagePrice)).append("/gal • gas ").append(money(averageGasCost)).append("\n");
+            String source = trip.optString("gasSource", "").trim();
+            if (!source.isEmpty()) s.append(source).append("\n");
             s.append("Full trip: ").append(money(averageTotal)).append("\n\n");
             s.append("YOUR CONSERVATIVE PRICE\n");
             if (conservativePrice > 0) {
@@ -196,10 +202,8 @@ public class TrailboundDualGasActivity extends TrailboundCleanFixActivity {
     }
 
     private void attachRefreshWatcher(EditText field) {
-        if (field == null) return;
-        Object tag = field.getTag();
-        if (tag != null && tag.toString().contains("dual_refresh")) return;
-        field.setTag((tag == null ? "" : tag.toString()) + " dual_refresh");
+        if (field == null || dualWatchedFields.contains(field)) return;
+        dualWatchedFields.add(field);
         field.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -255,31 +259,36 @@ public class TrailboundDualGasActivity extends TrailboundCleanFixActivity {
     }
 
     private EditText findTaggedEditText(View root, String tag) {
-        ArrayList<EditText> fields = new ArrayList<>(); collect(root, EditText.class, fields);
+        ArrayList<EditText> fields = new ArrayList<>();
+        collect(root, EditText.class, fields);
         for (EditText e : fields) if (tag.equals(e.getTag())) return e;
         return null;
     }
 
     private TextView findTaggedTextView(View root, String tag) {
-        ArrayList<TextView> views = new ArrayList<>(); collect(root, TextView.class, views);
+        ArrayList<TextView> views = new ArrayList<>();
+        collect(root, TextView.class, views);
         for (TextView t : views) if (tag.equals(t.getTag())) return t;
         return null;
     }
 
     private Button findButton(View root, String target) {
-        ArrayList<Button> buttons = new ArrayList<>(); collect(root, Button.class, buttons);
+        ArrayList<Button> buttons = new ArrayList<>();
+        collect(root, Button.class, buttons);
         for (Button b : buttons) if (b.getText() != null && target.equalsIgnoreCase(b.getText().toString().trim())) return b;
         return null;
     }
 
     private TextView findExactText(View root, String target) {
-        ArrayList<TextView> views = new ArrayList<>(); collect(root, TextView.class, views);
+        ArrayList<TextView> views = new ArrayList<>();
+        collect(root, TextView.class, views);
         for (TextView t : views) if (t.getText() != null && target.equalsIgnoreCase(t.getText().toString().trim())) return t;
         return null;
     }
 
     private CheckBox findCheckBoxContaining(View root, String target) {
-        ArrayList<CheckBox> boxes = new ArrayList<>(); collect(root, CheckBox.class, boxes);
+        ArrayList<CheckBox> boxes = new ArrayList<>();
+        collect(root, CheckBox.class, boxes);
         for (CheckBox b : boxes) if (b.getText() != null && b.getText().toString().contains(target)) return b;
         return null;
     }
@@ -314,8 +323,13 @@ public class TrailboundDualGasActivity extends TrailboundCleanFixActivity {
         return o == null ? "" : o.optString("id", "");
     }
 
-    private String text(EditText e) { return e == null || e.getText() == null ? "" : e.getText().toString(); }
-    private double number(String s) { try { return Double.parseDouble(s == null ? "" : s.trim()); } catch (Exception e) { return 0; } }
+    private String text(EditText e) {
+        return e == null || e.getText() == null ? "" : e.getText().toString();
+    }
+    private double number(String s) {
+        try { return Double.parseDouble(s == null ? "" : s.trim()); }
+        catch (Exception e) { return 0; }
+    }
     private String one(double d) { return String.format(Locale.US, "%.1f", d); }
     private String money(double d) { return NumberFormat.getCurrencyInstance(Locale.US).format(d); }
     private int dp(int n) { return (int) (n * getResources().getDisplayMetrics().density + .5f); }
