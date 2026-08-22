@@ -9,7 +9,7 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".TrailboundCleanFixActivity"
+            android:name=".TrailboundDualGasActivity"
             android:screenOrientation="unspecified"
             android:exported="true">
             <intent-filter>
