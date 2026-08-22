@@ -31,14 +31,17 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Trailbound 5.4: keeps active-trip values persistent and makes nearby hotel searches real. */
+/**
+ * Trailbound state/persistence layer.
+ * Uses exact label-to-control binding so unrelated fields can never overwrite
+ * each other, and keeps nearby hotel searches isolated from saved trip data.
+ */
 public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
     private static final String PREFS = "trailbound_v5";
     private SharedPreferences prefs;
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private boolean patching;
     private boolean restoring;
-    private String patchedTripId = "";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -73,14 +76,14 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
         JSONObject trip = profileById("trips", tripId);
         if (trip.optString("id", "").isEmpty()) return;
 
-        EditText snacks = fieldAfterLabel(root, "SNACKS & DRINKS");
-        EditText extras = fieldAfterLabel(root, "OTHER TRIP MONEY");
-        EditText gas = fieldAfterLabel(root, "PREPARED GAS $ / GAL");
-        EditText tank = fieldAfterLabel(root, "Tank size (gal)");
-        EditText departure = fieldAfterLabel(root, "Departure gas (gal)");
+        EditText snacks = exactFieldAfterLabel(root, "SNACKS & DRINKS");
+        EditText extras = exactFieldAfterLabel(root, "OTHER TRIP MONEY");
+        EditText gas = exactFieldAfterLabel(root, "PREPARED GAS $ / GAL");
+        EditText tank = exactFieldAfterLabel(root, "Tank size (gal)");
+        EditText departure = exactFieldAfterLabel(root, "Departure gas (gal)");
         CheckBox hotelToggle = findCheckBoxContaining(root, "Include linked hotel");
-        Spinner carSpinner = spinnerAfterLabel(root, "CAR FOR THIS TRIP");
-        Spinner hotelSpinner = spinnerAfterLabel(root, "HOTEL FOR THIS TRIP");
+        Spinner carSpinner = exactSpinnerAfterLabel(root, "CAR FOR THIS TRIP");
+        Spinner hotelSpinner = exactSpinnerAfterLabel(root, "HOTEL FOR THIS TRIP");
         Button update = findButton(root, "Update estimate");
 
         restoring = true;
@@ -90,51 +93,52 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
             restoreIfPresent(gas, trip, "gas");
             restoreIfPresent(tank, trip, "tankSize");
             restoreIfPresent(departure, trip, "departureFuel");
-            if (hotelToggle != null && trip.has("includeHotel")) hotelToggle.setChecked(trip.optBoolean("includeHotel", true));
+            if (hotelToggle != null && trip.has("includeHotel")) {
+                hotelToggle.setChecked(trip.optBoolean("includeHotel", true));
+            }
         } finally {
             restoring = false;
         }
 
-        if (!tripId.equals(patchedTripId)) {
-            patchedTripId = tripId;
-            attachTripWatcher(snacks, "snacks", update);
-            attachTripWatcher(extras, "extras", update);
-            attachTripWatcher(gas, "gas", update);
-            attachTripWatcher(tank, "tankSize", update);
-            attachTripWatcher(departure, "departureFuel", update);
-            if (hotelToggle != null && !"statefix".equals(hotelToggle.getTag())) {
-                hotelToggle.setTag("statefix");
-                hotelToggle.setOnCheckedChangeListener((b, checked) -> {
-                    if (restoring) return;
-                    persistActiveTripValue("includeHotel", checked);
-                    if (update != null) update.post(update::performClick);
-                });
-            }
-            if (carSpinner != null && !"statefix".equals(carSpinner.getTag())) {
-                carSpinner.setTag("statefix");
-                carSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-                    @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                        if (restoring) return;
-                        persistActiveTripValue("vehicleId", selectedProfileId("vehicles", position));
-                        if (update != null) update.post(update::performClick);
-                    }
-                    @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-                });
-            }
-            if (hotelSpinner != null && !"statefix".equals(hotelSpinner.getTag())) {
-                hotelSpinner.setTag("statefix");
-                hotelSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-                    @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                        if (restoring) return;
-                        persistActiveTripValue("hotelId", selectedProfileId("hotels", position));
-                        if (update != null) update.post(update::performClick);
-                    }
-                    @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-                });
-            }
+        attachTripWatcher(snacks, "snacks", update);
+        attachTripWatcher(extras, "extras", update);
+        attachTripWatcher(gas, "gas", update);
+        attachTripWatcher(tank, "tankSize", update);
+        attachTripWatcher(departure, "departureFuel", update);
+
+        if (hotelToggle != null && !"statefix_toggle".equals(hotelToggle.getTag())) {
+            hotelToggle.setTag("statefix_toggle");
+            hotelToggle.setOnCheckedChangeListener((b, checked) -> {
+                if (restoring) return;
+                persistActiveTripValue("includeHotel", checked);
+                scheduleEstimate(update);
+            });
         }
 
-        // Keep the fuel planner's fallback preferences synchronized with this trip.
+        if (carSpinner != null && !"statefix_car".equals(carSpinner.getTag())) {
+            carSpinner.setTag("statefix_car");
+            carSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    if (restoring) return;
+                    persistActiveTripValue("vehicleId", selectedProfileId("vehicles", position));
+                    scheduleEstimate(update);
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            });
+        }
+
+        if (hotelSpinner != null && !"statefix_hotel".equals(hotelSpinner.getTag())) {
+            hotelSpinner.setTag("statefix_hotel");
+            hotelSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    if (restoring) return;
+                    persistActiveTripValue("hotelId", selectedProfileId("hotels", position));
+                    scheduleEstimate(update);
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            });
+        }
+
         SharedPreferences.Editor e = prefs.edit();
         if (tank != null) e.putString("fuelTankSize", safeText(tank));
         if (departure != null) e.putString("departureFuel", safeText(departure));
@@ -142,26 +146,38 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
     }
 
     private void attachTripWatcher(EditText field, String key, Button update) {
-        if (field == null || "statefix_".concat(key).equals(field.getTag())) return;
-        field.setTag("statefix_" + key);
+        if (field == null) return;
+        String tag = "statefix_" + key;
+        if (tag.equals(field.getTag())) return;
+        field.setTag(tag);
+        final Runnable recalc = update == null ? null : update::performClick;
         field.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 if (restoring) return;
-                persistActiveTripValue(key, s == null ? "" : s.toString());
-                if ("tankSize".equals(key)) prefs.edit().putString("fuelTankSize", s == null ? "" : s.toString()).apply();
-                if ("departureFuel".equals(key)) prefs.edit().putString("departureFuel", s == null ? "" : s.toString()).apply();
-                if (update != null) update.removeCallbacks(update::performClick);
-                if (update != null) update.postDelayed(update::performClick, 120);
+                String value = s == null ? "" : s.toString();
+                persistActiveTripValue(key, value);
+                if ("tankSize".equals(key)) prefs.edit().putString("fuelTankSize", value).apply();
+                if ("departureFuel".equals(key)) prefs.edit().putString("departureFuel", value).apply();
+                if (update != null && recalc != null) {
+                    update.removeCallbacks(recalc);
+                    update.postDelayed(recalc, 160);
+                }
             }
             @Override public void afterTextChanged(Editable s) { }
         });
     }
 
+    private void scheduleEstimate(Button update) {
+        if (update == null) return;
+        update.postDelayed(update::performClick, 80);
+    }
+
     private void restoreIfPresent(EditText field, JSONObject trip, String key) {
         if (field == null || !trip.has(key)) return;
         String saved = trip.optString(key, "");
-        if (!saved.equals(field.getText() == null ? "" : field.getText().toString())) field.setText(saved);
+        String current = field.getText() == null ? "" : field.getText().toString();
+        if (!saved.equals(current)) field.setText(saved);
     }
 
     private synchronized void persistActiveTripValue(String key, Object value) {
@@ -194,7 +210,7 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
     private void searchNearby(String category) {
         String hotelId = activeHotelIdForCurrentTrip();
         JSONObject hotel = profileById("hotels", hotelId);
-        double lat = positive(hotel.optString("lat", "0"));
+        double lat = signed(hotel.optString("lat", "0"));
         double lon = signed(hotel.optString("lon", "0"));
         if (lat == 0 && lon == 0) {
             Toast.makeText(this, "Find and save the hotel address first.", Toast.LENGTH_SHORT).show();
@@ -218,10 +234,12 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
                         JSONObject tags = el.optJSONObject("tags");
                         String name = tags == null ? "" : tags.optString("name", "");
                         if (name.isEmpty()) continue;
-                        double plat = el.optDouble("lat", Double.NaN), plon = el.optDouble("lon", Double.NaN);
+                        double plat = el.optDouble("lat", Double.NaN);
+                        double plon = el.optDouble("lon", Double.NaN);
                         JSONObject center = el.optJSONObject("center");
                         if ((Double.isNaN(plat) || Double.isNaN(plon)) && center != null) {
-                            plat = center.optDouble("lat", Double.NaN); plon = center.optDouble("lon", Double.NaN);
+                            plat = center.optDouble("lat", Double.NaN);
+                            plon = center.optDouble("lon", Double.NaN);
                         }
                         if (Double.isNaN(plat) || Double.isNaN(plon)) continue;
                         places.add(new Place(name, plat, plon));
@@ -238,8 +256,9 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
         MapView map = firstMap(getWindow().getDecorView());
         if (map == null) return;
         clearNearbyMarkers(map);
-        double lat = positive(hotel.optString("lat", "0"));
+        double lat = signed(hotel.optString("lat", "0"));
         double lon = signed(hotel.optString("lon", "0"));
+
         Marker hotelMarker = new Marker(map);
         hotelMarker.setPosition(new GeoPoint(lat, lon));
         hotelMarker.setTitle(hotel.optString("label", "Hotel"));
@@ -247,6 +266,7 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
         hotelMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
         hotelMarker.setRelatedObject("nearby_hotel");
         map.getOverlays().add(hotelMarker);
+
         for (Place p : places) {
             Marker m = new Marker(map);
             m.setPosition(new GeoPoint(p.lat, p.lon));
@@ -303,19 +323,29 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
         return o == null ? "" : o.optString("id", "");
     }
 
-    private EditText fieldAfterLabel(View root, String label) {
+    private EditText exactFieldAfterLabel(View root, String label) {
         TextView t = findExactText(root, label);
         if (t == null || !(t.getParent() instanceof ViewGroup)) return null;
         ViewGroup p = (ViewGroup) t.getParent();
-        for (int i = 0; i < p.getChildCount(); i++) if (p.getChildAt(i) instanceof EditText) return (EditText) p.getChildAt(i);
+        int start = p.indexOfChild(t) + 1;
+        for (int i = start; i < p.getChildCount(); i++) {
+            View child = p.getChildAt(i);
+            if (child instanceof EditText) return (EditText) child;
+            if (child instanceof TextView && !(child instanceof EditText)) break;
+        }
         return null;
     }
 
-    private Spinner spinnerAfterLabel(View root, String label) {
+    private Spinner exactSpinnerAfterLabel(View root, String label) {
         TextView t = findExactText(root, label);
         if (t == null || !(t.getParent() instanceof ViewGroup)) return null;
         ViewGroup p = (ViewGroup) t.getParent();
-        for (int i = 0; i < p.getChildCount(); i++) if (p.getChildAt(i) instanceof Spinner) return (Spinner) p.getChildAt(i);
+        int start = p.indexOfChild(t) + 1;
+        for (int i = start; i < p.getChildCount(); i++) {
+            View child = p.getChildAt(i);
+            if (child instanceof Spinner) return (Spinner) child;
+            if (child instanceof TextView) break;
+        }
         return null;
     }
 
@@ -363,18 +393,16 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
 
     private String http(String u) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
-        c.setConnectTimeout(12000); c.setReadTimeout(22000);
-        c.setRequestProperty("User-Agent", "TrailboundAndroid/5.4");
+        c.setConnectTimeout(12000);
+        c.setReadTimeout(22000);
+        c.setRequestProperty("User-Agent", "TrailboundAndroid/6.0");
+        c.setRequestProperty("Accept", "application/json,*/*");
         try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
-            StringBuilder s = new StringBuilder(); String line;
+            StringBuilder s = new StringBuilder();
+            String line;
             while ((line = br.readLine()) != null) s.append(line);
             return s.toString();
         } finally { c.disconnect(); }
-    }
-
-    private double positive(String s) {
-        try { return Math.max(0, Double.parseDouble(s == null ? "" : s.trim())); }
-        catch (Exception e) { return 0; }
     }
 
     private double signed(String s) {
@@ -382,7 +410,9 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
         catch (Exception e) { return 0; }
     }
 
-    private String safeText(EditText e) { return e == null || e.getText() == null ? "" : e.getText().toString(); }
+    private String safeText(EditText e) {
+        return e == null || e.getText() == null ? "" : e.getText().toString();
+    }
 
     @Override protected void onDestroy() {
         io.shutdownNow();
@@ -390,7 +420,13 @@ public class TrailboundStateFixActivity extends TrailboundGasStopMapActivity {
     }
 
     private static class Place {
-        final String name; final double lat; final double lon;
-        Place(String name, double lat, double lon) { this.name = name; this.lat = lat; this.lon = lon; }
+        final String name;
+        final double lat;
+        final double lon;
+        Place(String name, double lat, double lon) {
+            this.name = name;
+            this.lat = lat;
+            this.lon = lon;
+        }
     }
 }
