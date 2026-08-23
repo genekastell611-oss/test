@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#132A22" android:pathData="M54,4A50,50 0,1 0,54 104A50,50 0,1 0,54 4"/>
+    <!-- pixel heart -->
+    <path android:fillColor="#FF5C6C" android:pathData="M30,28h12v-6h12v6h12v-6h12v6h6v18h-6v6h-6v6h-6v6h-6v6h-6v-6h-6v-6h-6v-6h-6v-6h-6z"/>
+    <!-- little walking boot -->
+    <path android:fillColor="#F4B942" android:pathData="M30,72h18v6h12v6h18v12H42v-6H30z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M36,78h12v6H36zM54,84h12v6H54z"/>
+</vector>

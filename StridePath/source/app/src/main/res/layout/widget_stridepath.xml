@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <ImageView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:contentDescription="Pip"
+        android:src="@drawable/widget_pip" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView android:id="@+id/widget_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PIP • LEVEL 1" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+        <TextView android:id="@+id/widget_steps" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="0 / 5,000 steps" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" />
+        <ProgressBar android:id="@+id/widget_progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="8dp" android:layout_marginTop="4dp" android:max="100" android:progress="0" android:progressDrawable="@drawable/widget_progress" />
+        <TextView android:id="@+id/widget_details" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:maxLines="1" android:text="0 Cal • 0 fl oz • 0 XP" android:textColor="#CDE9DE" android:textSize="12sp" />
+        <TextView android:id="@+id/widget_message" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:maxLines="2" android:text="Your next small win is ready." android:textColor="#9FF2CE" android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

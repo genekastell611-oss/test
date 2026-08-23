@@ -4,8 +4,9 @@ Gamified Android health and weight-tracking app featuring Pip, quests, achieveme
 
 ## Source
 
-The complete Android Studio source is stored in `StridePath-RPG-4.0.1-US-Android-Source.zip`.
+- Browse the complete Android Studio project in [source](source).
+- Download the matching source archive from `StridePath-RPG-4.0.1-US-Android-Source.zip`.
 
 ## Build
 
-The repository workflow `Build StridePath APK` extracts the source, runs unit tests, builds the debug APK, and uploads it as a GitHub Actions artifact.
+The repository workflow `Build StridePath APK` runs unit tests, builds the debug APK, and uploads it as a GitHub Actions artifact.

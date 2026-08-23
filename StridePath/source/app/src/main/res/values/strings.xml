@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">StridePath RPG</string>
+    <string name="widget_description">Pip and today’s StridePath health quests</string>
+</resources>
