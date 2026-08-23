@@ -17,10 +17,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -29,17 +29,17 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Set up Gradle 8.9
+      - name: Set up Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.11.1"
 
       - name: Extract StridePath source
         run: |
           mkdir -p build-src
-          unzip -q StridePath/StridePath-RPG-4.0.0-US-Android-Source.zip -d build-src
+          unzip -q StridePath/StridePath-RPG-4.0.1-US-Android-Source.zip -d build-src
 
       - name: Run unit tests
         run: gradle -p build-src/StridePath testDebugUnitTest --stacktrace
@@ -50,7 +50,7 @@ jobs:
       - name: Upload StridePath APK
         uses: actions/upload-artifact@v4
         with:
-          name: StridePath-RPG-4.0.0-US-APK
+          name: StridePath-RPG-4.0.1-US-APK
           path: build-src/StridePath/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

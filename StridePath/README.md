@@ -1,10 +1,10 @@
-# StridePath RPG 4.0.0
+# StridePath RPG 4.0.1
 
 Gamified Android health and weight-tracking app featuring Pip, quests, achievements, workouts, nutrition, sleep, mood, measurements, Health Connect, data export, and a home-screen widget.
 
 ## Source
 
-The complete Android Studio source is stored in `StridePath-RPG-4.0.0-US-Android-Source.zip`.
+The complete Android Studio source is stored in `StridePath-RPG-4.0.1-US-Android-Source.zip`.
 
 ## Build
 
